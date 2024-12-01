@@ -1,81 +1,186 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAccount } from 'wagmi'
+import { ethers } from 'ethers'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Textarea } from './ui/textarea'
 import { Button } from './ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from './ui/select'
-import { ethers } from 'ethers'
 import { toast } from './ui/use-toast'
+import { contractInteractions } from '../utils/contractInteractions'
 
-export default function PaymentRequest() {
+// Utility function for robust input validation
+const validateInputs = (formData) => {
+  const errors = [];
+
+  // Validate wallet address
+  if (!ethers.isAddress(formData.clientAddress)) {
+    errors.push("Invalid client wallet address");
+  }
+
+  // Validate amount (positive and reasonable)
+  const amount = parseFloat(formData.amount);
+  if (isNaN(amount) || amount <= 0 || amount > 1000000) {
+    errors.push("Invalid amount. Must be between 0 and 1,000,000");
+  }
+
+  // Validate deadline (future date)
+  const deadline = new Date(formData.deadline);
+  const today = new Date();
+  if (deadline <= today) {
+    errors.push("Deadline must be a future date");
+  }
+
+  // Validate title and description length
+  if (formData.title.length < 3 || formData.title.length > 100) {
+    errors.push("Project title must be between 3 and 100 characters");
+  }
+
+  if (formData.description.length < 10 || formData.description.length > 500) {
+    errors.push("Description must be between 10 and 500 characters");
+  }
+
+  return errors;
+};
+
+const PaymentRequest = () => {
   const navigate = useNavigate()
-  const { address, isConnected } = useAccount()
+  const { isConnected, address } = useAccount()
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     amount: '',
     currency: 'ETH',
-    deadline: '',
-    clientAddress: ''
+    clientAddress: '',
+    deadline: ''
   })
+
+  // Token addresses with network-specific considerations
+  const getTokenAddress = useCallback((currency) => {
+    const tokenAddresses = {
+      ETH: "0x0000000000000000000000000000000000000000", // Native ETH
+      USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC on Ethereum mainnet
+      DAI: "0x6B175474E89094C44Da98b954EedeAC495271d0F" // DAI on Ethereum mainnet
+    }
+    return tokenAddresses[currency] || null
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    
+    // Initial connection check
     if (!isConnected) {
       toast({
-        title: "Error",
-        description: "Please connect your wallet first",
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet to create a payment request",
         variant: "destructive"
       })
       return
     }
-  
+
+    // Validate inputs
+    const validationErrors = validateInputs(formData)
+    if (validationErrors.length > 0) {
+      validationErrors.forEach(error => 
+        toast({
+          title: "Validation Error",
+          description: error,
+          variant: "destructive"
+        })
+      )
+      return
+    }
+
     setLoading(true)
     try {
-      const deadlineDate = new Date(formData.deadline).getTime() / 1000
+      // Robust deadline conversion
+      const deadlineTimestamp = Math.floor(new Date(formData.deadline).getTime() / 1000)
       
+      // Dynamic decimal handling
+      const decimals = formData.currency === 'ETH' ? 18 : 
+                       formData.currency === 'USDC' ? 6 : 
+                       formData.currency === 'DAI' ? 18 : 18
+
+      // Safe parsing of amount
+      const parsedAmount = ethers.parseUnits(formData.amount.toString(), decimals)
       const tokenAddress = getTokenAddress(formData.currency)
-  
-      const decimals = formData.currency === 'ETH' ? 18 : 6
-      const parsedAmount = ethers.utils.parseUnits(formData.amount.toString(), decimals)
-  
-      const provider = new ethers.providers.Web3Provider(window.ethereum)
-      const signer = provider.getSigner()
-      
-      const contractAddress = "YOUR_CONTRACT_ADDRESS"
-      const contractABI = []
-      
-      const contract = new ethers.Contract(
-        contractAddress,
-        contractABI,
-        signer
-      )
-  
+
+      // Retrieve contract with error handling
+      const contract = await contractInteractions.getContract()
+      if (!contract) {
+        throw new Error("Unable to initialize contract. Please check your network connection.")
+      }
+
+      // Comprehensive transaction parameters
+      const transactionParams = {
+        freelancer: formData.clientAddress,
+        tokenAddress: tokenAddress,
+        amount: parsedAmount,
+        description: formData.description,
+        deadline: deadlineTimestamp,
+        ...(formData.currency === 'ETH' ? { value: parsedAmount } : {})
+      }
+
+      console.log('Creating milestone with params:', transactionParams)
+
+      // Gas estimation with error handling
+      let gasEstimate;
+      try {
+        gasEstimate = await contract.createMilestone.estimateGas(
+          transactionParams.freelancer,
+          transactionParams.tokenAddress,
+          transactionParams.amount,
+          transactionParams.description,
+          transactionParams.deadline,
+          { value: transactionParams.value || 0 }
+        )
+      } catch (estimationError) {
+        console.error('Gas estimation failed:', estimationError)
+        throw new Error('Unable to estimate gas. Transaction might fail.')
+      }
+
+      // Add 20% buffer to gas estimate
+      const gasLimit = Math.floor(gasEstimate * 1.2)
+
+      // Execute transaction
       const tx = await contract.createMilestone(
-        formData.clientAddress,
-        tokenAddress,
-        parsedAmount,
-        formData.description,
-        deadlineDate
+        transactionParams.freelancer,
+        transactionParams.tokenAddress,
+        transactionParams.amount,
+        transactionParams.description,
+        transactionParams.deadline,
+        { 
+          value: transactionParams.value || 0,
+          gasLimit 
+        }
       )
-  
-      await tx.wait()
-  
+
+      // Wait for transaction confirmation
+      const receipt = await tx.wait()
+      
       toast({
         title: "Success",
         description: "Payment request created successfully!",
+        variant: "default"
       })
-  
+
+      // Navigate to dashboard
       navigate('/dashboard')
+
     } catch (error) {
-      console.error('Error creating payment request:', error)
+      console.error('Transaction Error:', error)
+      
+      // Comprehensive error handling
+      const errorMessage = error.reason || 
+        error.message || 
+        "An unexpected error occurred during payment request creation"
+
       toast({
-        title: "Error",
-        description: error.message || "Failed to create payment request",
+        title: "Transaction Failed",
+        description: errorMessage,
         variant: "destructive"
       })
     } finally {
@@ -91,22 +196,11 @@ export default function PaymentRequest() {
     }))
   }
 
-  // Helper function to get token address based on currency
-  const getTokenAddress = (currency) => {
-    // Replace these with actual token addresses from your config
-    const tokenAddresses = {
-      ETH: "0x0000000000000000000000000000000000000000", // Native ETH
-      USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC on mainnet
-      DAI: "0x6B175474E89094C44Da98b954EedeAC495271d0F" // DAI on mainnet
-    }
-    return tokenAddresses[currency]
-  }
-
   if (!isConnected) {
     return (
       <div className="p-6 text-center">
-        <h2 className="text-xl font-semibold mb-4">Please connect your wallet</h2>
-        <p className="text-gray-600">You need to connect your wallet to create payment requests</p>
+        <h2 className="text-xl font-semibold mb-4">Wallet Connection Required</h2>
+        <p className="text-gray-600">Please connect your wallet to create payment requests</p>
       </div>
     )
   }
@@ -213,3 +307,5 @@ export default function PaymentRequest() {
     </div>
   )
 }
+
+export default PaymentRequest

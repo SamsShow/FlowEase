@@ -4,9 +4,12 @@ import { useAccount } from 'wagmi'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
-import { Plus, DollarSign, CheckCircle, Clock, AlertCircle } from 'lucide-react'
+import { Plus, DollarSign, CheckCircle, Clock, AlertTriangle } from 'lucide-react'
 import { ScrollArea } from './ui/scroll-area'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './ui/table'
+import { contractInteractions } from '../utils/contractInteractions'
+import { Loading } from './ui/loading'
+import { toast } from './ui/use-toast'
 
 const statusColors = {
   pending: 'bg-yellow-500/10 text-yellow-500',
@@ -23,83 +26,73 @@ const StatusBadge = ({ status }) => (
 export default function Dashboard() {
   const navigate = useNavigate()
   const { address, isConnected } = useAccount()
+  const [loading, setLoading] = useState(true)
   const [projects, setProjects] = useState([])
-  const [userStats, setUserStats] = useState({
+  const [stats, setStats] = useState({
     totalEarnings: '0',
     activeProjects: 0,
     completedProjects: 0,
     disputes: 0
   })
 
-  // Fetch user's projects from smart contract
-  const fetchUserProjects = async () => {
-    try {
-      // TODO: Implement contract interaction to fetch projects
-      // This is a placeholder for demonstration
-      const mockProjects = [
-        {
-          id: 1,
-          title: 'Website Development',
-          client: '0x1234...5678',
-          amount: '5 ETH',
-          deadline: '2024-03-01',
-          status: 'pending',
-          milestones: 3,
-          completedMilestones: 1
-        }
-      ]
-      setProjects(mockProjects)
-    } catch (error) {
-      console.error('Error fetching projects:', error)
-    }
-  }
-
-  // Fetch user stats from smart contract
-  const fetchUserStats = async () => {
-    try {
-      // TODO: Implement contract interaction to fetch user stats
-      // This is a placeholder for demonstration
-      const stats = {
-        totalEarnings: '15.5',
-        activeProjects: 4,
-        completedProjects: 12,
-        disputes: 0
-      }
-      setUserStats(stats)
-    } catch (error) {
-      console.error('Error fetching user stats:', error)
-    }
-  }
-
   useEffect(() => {
-    if (isConnected && address) {
-      fetchUserProjects()
-      fetchUserStats()
+    if (isConnected) {
+      fetchDashboardData()
     }
   }, [isConnected, address])
 
-  const stats = [
-    {
-      title: 'Total Earnings',
-      value: `${userStats.totalEarnings} ETH`,
-      icon: <DollarSign className="w-4 h-4 text-emerald-500" />
-    },
-    {
-      title: 'Active Projects',
-      value: userStats.activeProjects.toString(),
-      icon: <Clock className="w-4 h-4 text-blue-500" />
-    },
-    {
-      title: 'Completed Projects',
-      value: userStats.completedProjects.toString(),
-      icon: <CheckCircle className="w-4 h-4 text-green-500" />
-    },
-    {
-      title: 'Disputes',
-      value: userStats.disputes.toString(),
-      icon: <AlertCircle className="w-4 h-4 text-red-500" />
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const contract = await contractInteractions.getContract();
+      
+      // Get user profile and stats
+      const profile = await contract.getUserProfile(address);
+      
+      // Get all events (since ethers v6 handles filters differently)
+      const events = await contract.queryFilter('MilestoneCreated');
+      
+      // Filter events for the current user
+      const userEvents = events.filter(event => 
+        event.args && event.args[2] && event.args[2].toLowerCase() === address.toLowerCase()
+      );
+      
+      // Format milestones into projects
+      const formattedProjects = await Promise.all(
+        userEvents.map(async (event) => {
+          const milestone = await contract.milestones(event.args[0]); // Assuming milestoneId is the first argument
+          return {
+            id: milestone.id.toString(),
+            title: milestone.description,
+            client: milestone.client,
+            amount: milestone.amount.toString(),
+            deadline: new Date(milestone.deadline * 1000).toLocaleDateString(),
+            status: milestone.status.toLowerCase(),
+            milestones: 1,
+            completedMilestones: milestone.status === 'COMPLETED' ? 1 : 0
+          };
+        })
+      );
+
+      setStats({
+        totalEarnings: profile.totalEarnings,
+        activeProjects: formattedProjects.filter(p => p.status === 'in_progress').length,
+        completedProjects: profile.completedJobs,
+        disputes: formattedProjects.filter(p => p.status === 'disputed').length
+      });
+
+      setProjects(formattedProjects);
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load dashboard data',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
     }
-  ]
+  };
 
   const handleNewProject = () => {
     navigate('/payment-request')
@@ -114,6 +107,10 @@ export default function Dashboard() {
     )
   }
 
+  if (loading) {
+    return <Loading />
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
@@ -125,24 +122,52 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {stats.map((stat, index) => (
-          <Card key={index}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-              {stat.icon}
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-            </CardContent>
-          </Card>
-        ))}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Total Earnings</CardTitle>
+            <DollarSign className="w-4 h-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalEarnings} ETH</div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Active Projects</CardTitle>
+            <Clock className="w-4 h-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.activeProjects}</div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Completed Projects</CardTitle>
+            <CheckCircle className="w-4 h-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.completedProjects}</div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Active Disputes</CardTitle>
+            <AlertTriangle className="w-4 h-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.disputes}</div>
+          </CardContent>
+        </Card>
       </div>
 
       <Tabs defaultValue="projects" className="w-full">
         <TabsList>
           <TabsTrigger value="projects">Projects</TabsTrigger>
           <TabsTrigger value="milestones">Milestones</TabsTrigger>
-          <TabsTrigger value="transactions">Transactions</TabsTrigger>
+          <TabsTrigger value="disputes">Disputes</TabsTrigger>
         </TabsList>
 
         <TabsContent value="projects">
@@ -161,6 +186,7 @@ export default function Dashboard() {
                       <TableHead>Deadline</TableHead>
                       <TableHead>Progress</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -169,7 +195,7 @@ export default function Dashboard() {
                         <TableRow key={project.id}>
                           <TableCell>{project.title}</TableCell>
                           <TableCell>{project.client}</TableCell>
-                          <TableCell>{project.amount}</TableCell>
+                          <TableCell>{project.amount} ETH</TableCell>
                           <TableCell>{project.deadline}</TableCell>
                           <TableCell>
                             {project.completedMilestones}/{project.milestones} Milestones
@@ -177,11 +203,20 @@ export default function Dashboard() {
                           <TableCell>
                             <StatusBadge status={project.status} />
                           </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => navigate(`/milestones/${project.id}`)}
+                            >
+                              View Details
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-4">
+                        <TableCell colSpan={7} className="text-center py-4">
                           No projects found
                         </TableCell>
                       </TableRow>
@@ -194,11 +229,25 @@ export default function Dashboard() {
         </TabsContent>
 
         <TabsContent value="milestones">
-          {/* Milestone content will be implemented in Milestones.jsx */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Project Milestones</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Milestone content will be implemented in Milestones.jsx */}
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="transactions">
-          {/* Transaction content will be implemented in Transactions.jsx */}
+        <TabsContent value="disputes">
+          <Card>
+            <CardHeader>
+              <CardTitle>Active Disputes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Dispute content will be implemented in Disputes.jsx */}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

@@ -2,13 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import { injected } from 'wagmi/connectors';
 import { Link, useLocation } from 'react-router-dom';
+import { NotificationCenter } from '../Notifications/NotificationCenter';
+import { Button } from '../ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
+import { User, Settings, LogOut, Menu } from 'lucide-react';
 
-const Navbar = () => {
+export default function Navbar() {
   const { address, isConnected } = useAccount();
   const { connect, isLoading, error } = useConnect();
   const { disconnect } = useDisconnect();
   const location = useLocation();
-  
   const [shortAddress, setShortAddress] = useState('');
 
   useEffect(() => {
@@ -26,18 +36,14 @@ const Navbar = () => {
     }
   };
 
-  // Log any connection errors
-  useEffect(() => {
-    if (error) {
-      console.error('Wallet connection error:', error);
-    }
-  }, [error]);
-
-  // Log connection status changes
-  useEffect(() => {
-    console.log('Connection status:', isConnected);
-    console.log('Current address:', address);
-  }, [isConnected, address]);
+  const navigationItems = [
+    { path: '/dashboard', label: 'Dashboard' },
+    { path: '/explore', label: 'Explore' },
+    { path: '/client/projects', label: 'My Projects' },
+    { path: '/transactions', label: 'Transactions' },
+    { path: '/analytics', label: 'Analytics' },
+    { path: '/escrow', label: 'Escrow' },
+  ];
 
   return (
     <nav className="bg-white shadow-lg">
@@ -46,56 +52,75 @@ const Navbar = () => {
           <div className="flex items-center space-x-4">
             <Link to="/" className="text-xl font-bold">FlowEase</Link>
             {isConnected && (
-              <>
-                <Link 
-                  to="/dashboard" 
-                  className={`px-3 py-2 rounded-md ${
-                    location.pathname === '/dashboard' 
-                      ? 'bg-gray-100 text-gray-900' 
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  Dashboard
-                </Link>
-                <Link 
-                  to="/profile" 
-                  className={`px-3 py-2 rounded-md ${
-                    location.pathname === '/profile' 
-                      ? 'bg-gray-100 text-gray-900' 
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  Profile
-                </Link>
-              </>
+              <div className="hidden md:flex space-x-4">
+                {navigationItems.map((item) => (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`px-3 py-2 rounded-md ${
+                      location.pathname === item.path
+                        ? 'bg-gray-100 text-gray-900'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
             )}
           </div>
-          
+
           <div className="flex items-center space-x-4">
             {isConnected ? (
               <>
-                <span className="text-gray-700">{shortAddress}</span>
-                <button
-                  onClick={() => disconnect()}
-                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md"
-                >
-                  Disconnect
-                </button>
+                <NotificationCenter />
+                
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="relative">
+                      <Menu className="h-5 w-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>
+                      <span className="font-mono text-sm">{shortAddress}</span>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile" className="flex items-center">
+                        <User className="mr-2 h-4 w-4" />
+                        Profile
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/settings" className="flex items-center">
+                        <Settings className="mr-2 h-4 w-4" />
+                        Settings
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => disconnect()}
+                      className="text-red-600"
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Disconnect
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </>
             ) : (
-              <button
+              <Button
                 onClick={handleConnect}
                 disabled={isLoading}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md disabled:opacity-50"
+                className="bg-blue-500 hover:bg-blue-600 text-white"
               >
                 {isLoading ? 'Connecting...' : 'Connect Wallet'}
-              </button>
+              </Button>
             )}
           </div>
         </div>
       </div>
     </nav>
   );
-};
-
-export default Navbar; 
+} 
