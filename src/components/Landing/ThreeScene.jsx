@@ -3,15 +3,18 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { Box, OrbitControls, Sphere, MeshDistortMaterial } from '@react-three/drei'
 
 function AnimatedSphere() {
-  const meshRef = useRef()
+  const meshRef = useRef(null)
+  
   useFrame((state) => {
-    const time = state.clock.getElapsedTime()
-    meshRef.current.position.y = Math.sin(time) * 0.5
-    meshRef.current.rotation.y = time * 0.5
+    if (meshRef.current) {
+      const time = state.clock.getElapsedTime()
+      meshRef.current.position.y = Math.sin(time) * 0.5
+      meshRef.current.rotation.y = time * 0.5
+    }
   })
 
   return (
-    <Sphere args={[1, 100, 200]} scale={1.5}>
+    <Sphere ref={meshRef} args={[1, 100, 200]} scale={1.5}>
       <MeshDistortMaterial
         color="#50C878"
         attach="material"
@@ -24,11 +27,14 @@ function AnimatedSphere() {
 }
 
 function AnimatedBox() {
-  const meshRef = useRef()
+  const meshRef = useRef(null)
+  
   useFrame((state) => {
-    const time = state.clock.getElapsedTime()
-    meshRef.current.rotation.x = time * 0.5
-    meshRef.current.rotation.y = time * 0.3
+    if (meshRef.current) {
+      const time = state.clock.getElapsedTime()
+      meshRef.current.rotation.x = time * 0.5
+      meshRef.current.rotation.y = time * 0.3
+    }
   })
 
   return (
@@ -49,4 +55,3 @@ export default function ThreeScene() {
     </Canvas>
   )
 }
-

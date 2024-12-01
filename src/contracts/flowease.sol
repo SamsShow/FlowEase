@@ -53,11 +53,34 @@ contract FlowEasePaymentSystem is Ownable, ReentrancyGuard {
         uint256 votesForClient;
     }
 
+    // Additional structures for new features
+    struct UserProfile {
+        string ipfsHash;           // IPFS hash containing profile data (name, bio, etc.)
+        string profileImage;       // IPFS hash of profile image
+        uint256 totalJobs;
+        uint256 completedJobs;
+        uint256 averageRating;     // Stored as number * 100 (e.g., 4.5 = 450)
+        bool isVerified;
+        mapping(uint256 => Review) reviews;
+        uint256 reviewCount;
+    }
+
+    struct Review {
+        address reviewer;
+        uint256 rating;           // 1-5 stars
+        string comment;
+        uint256 timestamp;
+        uint256 milestoneId;      // Associated milestone
+    }
+
     // State Variables
     mapping(uint256 => Milestone) public milestones;
     mapping(uint256 => Dispute) public disputes;
     mapping(address => uint256) public userReputation;
     mapping(address => bool) public allowedTokens;
+    mapping(address => UserProfile) public userProfiles;
+    mapping(address => bool) public verifiedUsers;
+    mapping(uint256 => mapping(address => bool)) public milestoneReviewed;
 
     uint256 public milestoneCounter;
     uint256 public disputeCounter;
@@ -93,6 +116,15 @@ contract FlowEasePaymentSystem is Ownable, ReentrancyGuard {
         uint256 indexed disputeId, 
         DisputeOutcome outcome
     );
+
+    event ProfileUpdated(address indexed user, string ipfsHash);
+    event ReviewAdded(
+        address indexed reviewer,
+        address indexed reviewed,
+        uint256 rating,
+        uint256 milestoneId
+    );
+    event UserVerified(address indexed user);
 
     // Constructor
     constructor() Ownable(msg.sender) {
@@ -143,6 +175,9 @@ contract FlowEasePaymentSystem is Ownable, ReentrancyGuard {
             deadline: _deadline
         });
 
+        // Update freelancer's job count
+        userProfiles[_freelancer].totalJobs++;
+
         // Emit milestone creation event
         emit MilestoneCreated(milestoneCounter, _freelancer, msg.sender, _amount);
     }
@@ -191,6 +226,9 @@ contract FlowEasePaymentSystem is Ownable, ReentrancyGuard {
         // Update milestone status and reputation
         milestone.status = MilestoneStatus.APPROVED;
         userReputation[milestone.freelancer] += 10;
+
+        // Update completed jobs count
+        userProfiles[milestone.freelancer].completedJobs++;
 
         emit MilestoneStatusChanged(_milestoneId, MilestoneStatus.APPROVED);
     }
@@ -305,4 +343,105 @@ contract FlowEasePaymentSystem is Ownable, ReentrancyGuard {
     // Fallback Functions
     receive() external payable {}
     fallback() external payable {}
+
+    // Profile Management Functions
+    function updateProfile(
+        string memory _ipfsHash,
+        string memory _profileImage
+    ) external {
+        UserProfile storage profile = userProfiles[msg.sender];
+        profile.ipfsHash = _ipfsHash;
+        profile.profileImage = _profileImage;
+        emit ProfileUpdated(msg.sender, _ipfsHash);
+    }
+
+    function verifyUser(address _user) external onlyOwner {
+        verifiedUsers[_user] = true;
+        userProfiles[_user].isVerified = true;
+        emit UserVerified(_user);
+    }
+
+    // Review System
+    function addReview(
+        address _reviewed,
+        uint256 _rating,
+        string memory _comment,
+        uint256 _milestoneId
+    ) external {
+        require(_rating >= 1 && _rating <= 5, "Invalid rating");
+        require(!milestoneReviewed[_milestoneId][msg.sender], "Already reviewed");
+        
+        Milestone storage milestone = milestones[_milestoneId];
+        require(
+            milestone.status == MilestoneStatus.APPROVED,
+            "Milestone not completed"
+        );
+        require(
+            msg.sender == milestone.client || msg.sender == milestone.freelancer,
+            "Unauthorized"
+        );
+
+        UserProfile storage profile = userProfiles[_reviewed];
+        uint256 reviewId = profile.reviewCount++;
+        
+        Review storage review = profile.reviews[reviewId];
+        review.reviewer = msg.sender;
+        review.rating = _rating;
+        review.comment = _comment;
+        review.timestamp = block.timestamp;
+        review.milestoneId = _milestoneId;
+
+        // Update average rating
+        profile.averageRating = (
+            (profile.averageRating * (profile.reviewCount - 1) + (_rating * 100))
+        ) / profile.reviewCount;
+
+        milestoneReviewed[_milestoneId][msg.sender] = true;
+
+        emit ReviewAdded(msg.sender, _reviewed, _rating, _milestoneId);
+    }
+
+    // Getter functions for profile data
+    function getUserProfile(
+        address _user
+    ) external view returns (
+        string memory ipfsHash,
+        string memory profileImage,
+        uint256 totalJobs,
+        uint256 completedJobs,
+        uint256 averageRating,
+        bool isVerified,
+        uint256 reviewCount
+    ) {
+        UserProfile storage profile = userProfiles[_user];
+        return (
+            profile.ipfsHash,
+            profile.profileImage,
+            profile.totalJobs,
+            profile.completedJobs,
+            profile.averageRating,
+            profile.isVerified,
+            profile.reviewCount
+        );
+    }
+
+    function getReview(
+        address _user,
+        uint256 _reviewId
+    ) external view returns (
+        address reviewer,
+        uint256 rating,
+        string memory comment,
+        uint256 timestamp,
+        uint256 milestoneId
+    ) {
+        Review storage review = userProfiles[_user].reviews[_reviewId];
+        return (
+            review.reviewer,
+            review.rating,
+            review.comment,
+            review.timestamp,
+            review.milestoneId
+        );
+    }
 }

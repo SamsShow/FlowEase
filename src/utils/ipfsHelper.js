@@ -1,20 +1,26 @@
 import axios from 'axios'
 import FormData from 'form-data'
 
-// Pinata credentials - store these in .env file
-const PINATA_API_KEY = "YOUR_PINATA_API_KEY"
-const PINATA_SECRET_KEY = "YOUR_PINATA_SECRET_KEY"
-const PINATA_JWT = "YOUR_PINATA_JWT" // You can use JWT instead of API key/secret
+
+const PINATA_API_KEY = import.meta.env.VITE_PINATA_API_KEY;
+const PINATA_SECRET_KEY = import.meta.env.VITE_PINATA_SECRET_KEY;
+const PINATA_JWT = import.meta.env.VITE_PINATA_JWT;
 
 export class IPFSHelper {
   constructor() {
     this.baseURL = 'https://api.pinata.cloud'
-    this.headers = {
-      'Authorization': `Bearer ${PINATA_JWT}`
-      // Alternatively, use API key/secret:
-      // 'pinata_api_key': PINATA_API_KEY,
-      // 'pinata_secret_api_key': PINATA_SECRET_KEY
+    
+    // Validate credentials
+    if (!PINATA_JWT && (!PINATA_API_KEY || !PINATA_SECRET_KEY)) {
+      throw new Error('Pinata credentials not found in environment variables')
     }
+
+    this.headers = PINATA_JWT
+      ? { 'Authorization': `Bearer ${PINATA_JWT}` }
+      : {
+          'pinata_api_key': PINATA_API_KEY,
+          'pinata_secret_api_key': PINATA_SECRET_KEY
+        }
   }
 
   /**
@@ -198,6 +204,44 @@ export class IPFSHelper {
     } catch (error) {
       console.error('Error unpinning content:', error)
       throw error
+    }
+  }
+
+  async uploadProfileData(profileData) {
+    try {
+      // Upload profile metadata
+      const ipfsHash = await this.uploadMetadata(
+        profileData,
+        `profile-${profileData.address}`
+      );
+      return ipfsHash;
+    } catch (error) {
+      console.error('Error uploading profile data:', error);
+      throw error;
+    }
+  }
+
+  async uploadProfileImage(imageFile) {
+    try {
+      // Upload profile image
+      const ipfsHash = await this.uploadFile(
+        imageFile,
+        `profile-image-${Date.now()}`
+      );
+      return ipfsHash;
+    } catch (error) {
+      console.error('Error uploading profile image:', error);
+      throw error;
+    }
+  }
+
+  async getProfileData(ipfsHash) {
+    try {
+      const profileData = await this.getContent(ipfsHash);
+      return profileData;
+    } catch (error) {
+      console.error('Error fetching profile data:', error);
+      throw error;
     }
   }
 }
