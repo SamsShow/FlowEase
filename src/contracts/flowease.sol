@@ -150,11 +150,12 @@ contract FlowEasePaymentSystem is Ownable, ReentrancyGuard {
 
         // Calculate platform fee
         uint256 platformFee = calculatePlatformFee(_amount);
-        
-        // Transfer tokens to contract
+        uint256 totalAmount = _amount + platformFee;
+
+        // Transfer total amount to contract
         IERC20 token = IERC20(_tokenAddress);
         require(
-            token.transferFrom(msg.sender, address(this), _amount), 
+            token.transferFrom(msg.sender, address(this), totalAmount), 
             "Token transfer failed"
         );
 
@@ -167,7 +168,7 @@ contract FlowEasePaymentSystem is Ownable, ReentrancyGuard {
             freelancer: _freelancer,
             client: msg.sender,
             tokenAddress: _tokenAddress,
-            amount: _amount - platformFee,
+            amount: _amount,
             platformFee: platformFee,
             description: _description,
             status: MilestoneStatus.PENDING,

@@ -1,5 +1,6 @@
 import { ethers } from 'ethers'
-import { contractAddress, contractABI } from './constants'
+import contractABI from '../config/abi.json'
+import { contractAddress } from './constants'
 
 export class ContractInteractions {
   constructor() {
@@ -13,6 +14,12 @@ export class ContractInteractions {
     const provider = new ethers.BrowserProvider(window.ethereum)
     const signer = await provider.getSigner()
     return new ethers.Contract(this.contractAddress, this.contractABI, signer)
+  }
+
+  async getProvider() {
+    if (!window.ethereum) throw new Error("No wallet found!")
+    
+    return new ethers.BrowserProvider(window.ethereum)
   }
 
   async getUserProfile(address) {
@@ -68,19 +75,109 @@ export class ContractInteractions {
     }
   }
 
-  async createEscrow(clientAddress, amount, milestones, deadline) {
+  async createMilestone(freelancerAddress, amount, description, deadline) {
     try {
-      const contract = await this.getContract()
-      const tx = await contract.createEscrow(clientAddress, milestones, deadline, {
-        value: amount
-      })
-      await tx.wait()
-      return tx.hash
+        const contract = await this.getContract()
+        const provider = await this.getProvider()
+        
+        // Validate inputs before contract interaction
+        if (!ethers.isAddress(freelancerAddress)) {
+            throw new Error("Invalid freelancer address")
+        }
+
+        if (description.length === 0 || description.length > 500) {
+            throw new Error("Description must be between 1-500 characters")
+        }
+
+        // Validate deadline is in the future
+        const currentTimestamp = Math.floor(Date.now() / 1000)
+        if (deadline <= currentTimestamp) {
+            throw new Error("Deadline must be in the future")
+        }
+
+        const params = {
+            freelancer: freelancerAddress,
+            tokenAddress: "0x0000000000000000000000000000000000000000",
+            amount: amount,
+            description: description,
+            deadline: BigInt(deadline)
+        }
+
+        const feeData = await provider.getFeeData()
+        
+        const txParams = {
+            value: params.amount,
+            gasPrice: feeData.gasPrice
+        }
+
+        // Enhanced gas estimation with detailed logging
+        let gasLimit
+        try {
+            console.log("Estimating gas with params:", {
+                freelancer: params.freelancer,
+                tokenAddress: params.tokenAddress,
+                amount: params.amount.toString(),
+                description: params.description,
+                deadline: params.deadline.toString()
+            })
+
+            const gasEstimate = await contract.createMilestone.estimateGas(
+                params.freelancer,
+                params.tokenAddress,
+                params.amount,
+                params.description,
+                params.deadline,
+                txParams
+            )
+            gasLimit = Math.floor(Number(gasEstimate) * 1.2)
+            console.log("Estimated gas:", gasLimit)
+        } catch (gasError) {
+            console.error("Detailed gas estimation error:", {
+                message: gasError.message,
+                code: gasError.code,
+                reason: gasError.reason,
+                details: gasError
+            })
+
+            // Fallback gas limit with more conservative estimate
+            gasLimit = 500000 // Increased from previous 300000
+        }
+
+        txParams.gasLimit = gasLimit
+
+        const transaction = await contract.createMilestone(
+            params.freelancer,
+            params.tokenAddress,
+            params.amount,
+            params.description,
+            params.deadline,
+            txParams
+        )
+
+        const receipt = await transaction.wait()
+        
+        if (receipt.status === 0) {
+            throw new Error("Transaction failed on-chain")
+        }
+
+        return receipt.hash
+
     } catch (error) {
-      console.error("Error creating escrow:", error)
-      throw error
+        console.error("Comprehensive milestone creation error:", {
+            message: error.message,
+            code: error.code,
+            stack: error.stack,
+            details: error
+        })
+
+        // More specific error handling
+        if (error.code === 'CALL_EXCEPTION') {
+            throw new Error("Contract call failed. Check contract conditions and parameters.")
+        }
+
+        throw error
     }
-  }
+}
 
   async getEscrowDetails(escrowId) {
     try {
@@ -108,21 +205,26 @@ export class ContractInteractions {
   async getAllProjects() {
     try {
       const contract = await this.getContract()
-      const projectCount = await contract.getProjectCount()
       
+      // Get milestone counter
+      const milestoneCounter = await contract.milestoneCounter()
       const projects = []
-      for (let i = 0; i < projectCount; i++) {
-        const project = await contract.projects(i)
+      
+      // Iterate through all milestones
+      for (let i = 0; i < Number(milestoneCounter); i++) {
+        const milestone = await contract.milestones(i)
+        
+        // Format the project data
         projects.push({
-          id: i,
-          title: project.title,
-          description: project.description,
-          budget: ethers.formatEther(project.budget),
-          deadline: Number(project.deadline),
-          client: project.client,
-          freelancer: project.freelancer,
-          status: this.getProjectStatus(Number(project.status)),
-          skills: project.skills || []
+          id: Number(milestone.id),
+          title: milestone.description,
+          description: milestone.description,
+          budget: ethers.formatEther(milestone.amount),
+          deadline: Number(milestone.deadline),
+          client: milestone.client,
+          freelancer: milestone.freelancer,
+          status: this.getMilestoneStatus(Number(milestone.status)),
+          createdAt: Number(milestone.createdAt)
         })
       }
       
@@ -133,7 +235,7 @@ export class ContractInteractions {
     }
   }
 
-  getProjectStatus(statusCode) {
+  getMilestoneStatus(statusCode) {
     const statuses = {
       0: 'open',
       1: 'in_progress',

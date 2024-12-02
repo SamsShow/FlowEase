@@ -10,6 +10,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { contractInteractions } from '../utils/contractInteractions'
 import { Loading } from './ui/loading'
 import { toast } from './ui/use-toast'
+import { ethers } from 'ethers'
 
 const statusColors = {
   pending: 'bg-yellow-500/10 text-yellow-500',
@@ -45,43 +46,44 @@ export default function Dashboard() {
     try {
       setLoading(true);
       const contract = await contractInteractions.getContract();
-      
-      // Get user profile and stats
-      const profile = await contract.getUserProfile(address);
-      
-      // Get all events (since ethers v6 handles filters differently)
-      const events = await contract.queryFilter('MilestoneCreated');
-      
-      // Filter events for the current user
-      const userEvents = events.filter(event => 
-        event.args && event.args[2] && event.args[2].toLowerCase() === address.toLowerCase()
-      );
-      
-      // Format milestones into projects
-      const formattedProjects = await Promise.all(
-        userEvents.map(async (event) => {
-          const milestone = await contract.milestones(event.args[0]); // Assuming milestoneId is the first argument
-          return {
+  
+      // Fetch user-specific data directly
+      const userProfile = await contract.getUserProfile(address);
+  
+      // Instead of getUserMilestones, you'll need to implement a different approach
+      // For example, you might need to manually filter milestones
+      const milestoneCount = await contract.milestoneCounter();
+      const formattedProjects = [];
+  
+      for (let i = 0; i < milestoneCount; i++) {
+        const milestone = await contract.milestones(i);
+        
+        // Check if the milestone is related to the current user (either as freelancer or client)
+        if (milestone.freelancer === address || milestone.client === address) {
+          formattedProjects.push({
             id: milestone.id.toString(),
             title: milestone.description,
             client: milestone.client,
-            amount: milestone.amount.toString(),
-            deadline: new Date(milestone.deadline * 1000).toLocaleDateString(),
-            status: milestone.status.toLowerCase(),
+            amount: ethers.formatEther(milestone.amount),
+            deadline: new Date(Number(milestone.deadline) * 1000).toLocaleDateString(),
+            status: getMilestoneStatus(Number(milestone.status)),
             milestones: 1,
-            completedMilestones: milestone.status === 'COMPLETED' ? 1 : 0
-          };
-        })
-      );
-
-      setStats({
-        totalEarnings: profile.totalEarnings,
+            completedMilestones: Number(milestone.status) === 3 ? 1 : 0
+          });
+        }
+      }
+  
+      // Calculate stats
+      const statsToSet = {
+        totalEarnings: ethers.formatEther(userProfile.totalEarnings || '0'),
         activeProjects: formattedProjects.filter(p => p.status === 'in_progress').length,
-        completedProjects: profile.completedJobs,
+        completedProjects: Number(userProfile.completedProjects || 0),
         disputes: formattedProjects.filter(p => p.status === 'disputed').length
-      });
-
+      };
+  
+      setStats(statsToSet);
       setProjects(formattedProjects);
+  
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       toast({
@@ -92,6 +94,19 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper function to convert numeric status to string
+  const getMilestoneStatus = (statusNum) => {
+    const statusMap = {
+      0: 'pending',
+      1: 'in_progress',
+      2: 'submitted',
+      3: 'approved',
+      4: 'disputed',
+      5: 'rejected'
+    };
+    return statusMap[statusNum] || 'pending';
   };
 
   const handleNewProject = () => {

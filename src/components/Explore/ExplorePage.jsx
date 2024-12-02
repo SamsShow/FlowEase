@@ -6,7 +6,7 @@ import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Badge } from '../ui/badge';
 import { toast } from '../ui/use-toast';
 import { SearchFilter } from '../Search/SearchFilter';
@@ -32,8 +32,14 @@ const ExplorePage = () => {
     const fetchProjects = async () => {
         try {
             const allProjects = await contractInteractions.getAllProjects();
-            setProjects(allProjects);
-            setFilteredProjects(allProjects);
+            const uniqueProjects = Array.from(new Map(
+                allProjects.map(project => [project.id, project])
+            ).values());
+            
+            const sortedProjects = uniqueProjects.sort((a, b) => b.createdAt - a.createdAt);
+            
+            setProjects(sortedProjects);
+            setFilteredProjects(sortedProjects);
         } catch (error) {
             console.error("Error fetching projects:", error);
             toast({
@@ -50,37 +56,77 @@ const ExplorePage = () => {
         e.preventDefault();
         try {
             setLoading(true);
-            const deadlineTimestamp = Math.floor(new Date(newProject.deadline).getTime() / 1000);
             
-            // Calculate total budget from milestones
-            const totalAmount = ethers.parseEther(newProject.budget);
-            
-            // Format milestones for contract
-            const milestones = newProject.milestones.map(m => ({
-                description: m.description,
-                amount: ethers.parseEther(m.amount)
-            }));
+            // Validate inputs
+            if (!newProject.title || !newProject.description || !newProject.budget || !newProject.deadline) {
+                throw new Error("Please fill in all required fields");
+            }
 
-            // Create escrow
-            await contractInteractions.createEscrow(
-                address,
-                totalAmount,
-                milestones,
-                deadlineTimestamp
+            // Validate budget is a positive number
+            const budgetNum = parseFloat(newProject.budget);
+            if (isNaN(budgetNum) || budgetNum <= 0) {
+                throw new Error("Please enter a valid budget amount");
+            }
+
+            // Validate deadline is in the future
+            const deadlineDate = new Date(newProject.deadline);
+            if (deadlineDate <= new Date()) {
+                throw new Error("Deadline must be in the future");
+            }
+
+            const deadlineTimestamp = Math.floor(deadlineDate.getTime() / 1000);
+            const confirmCreate = window.confirm(
+                "Are you sure you want to create this project? You'll need to confirm the transaction in MetaMask."
             );
+            
+            if (!confirmCreate) {
+                setLoading(false);
+                return;
+            }
+            try {
+                // Parse amount to wei
+                const amount = ethers.parseEther(budgetNum.toString());
+                
+                console.log("Creating milestone with params:", {
+                    address,
+                    amount: amount.toString(),
+                    description: newProject.description,
+                    deadline: deadlineTimestamp
+                });
 
-            toast({
-                title: "Success",
-                description: "Project created successfully!"
-            });
+                // Create milestone
+                const tx = await contractInteractions.createMilestone(
+                    address,
+                    amount,
+                    newProject.description,
+                    deadlineTimestamp
+                );
 
-            setShowCreateModal(false);
-            fetchProjects();
+                toast({
+                    title: "Success",
+                    description: `Project created successfully! Transaction: ${tx.slice(0, 10)}...`
+                });
+
+                setShowCreateModal(false);
+                await fetchProjects();
+                
+                // Reset form
+                setNewProject({
+                    title: '',
+                    description: '',
+                    budget: '',
+                    deadline: '',
+                    milestones: [{ description: '', amount: '' }]
+                });
+            } catch (txError) {
+                console.error("Transaction error:", txError);
+                throw new Error(txError.message || "Transaction failed. Please check your wallet has sufficient funds.");
+            }
         } catch (error) {
             console.error("Error creating project:", error);
             toast({
                 title: "Error",
-                description: "Failed to create project",
+                description: error.message || "Failed to create project. Please try again.",
                 variant: "destructive"
             });
         } finally {
@@ -188,6 +234,9 @@ const ExplorePage = () => {
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
                         <DialogTitle>Create New Project</DialogTitle>
+                        <DialogDescription>
+                            Fill in the project details and set up milestones for your new project.
+                        </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleCreateProject} className="space-y-4">
                         <div>

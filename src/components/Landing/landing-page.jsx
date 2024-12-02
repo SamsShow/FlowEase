@@ -14,15 +14,7 @@ import {
   CardTitle,
 } from "../ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-import {
-  ArrowRight,
-  CheckCircle,
-  DollarSign,
-  Lock,
-  Users,
-  Star,
-  ArrowDown,
-} from "lucide-react";
+import { ArrowRight, CheckCircle, DollarSign, Lock, Users, Star, ArrowDown } from 'lucide-react';
 import ThreeScene from "./ThreeScene";
 import CountUp from "react-countup";
 import { TypeAnimation } from "react-type-animation";
@@ -36,23 +28,23 @@ const FeatureCard = ({ feature, index }) => {
       initial={{ opacity: 0, y: 50 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: index * 0.1 }}
-      className="bg-zinc-800"
+      className="bg-zinc-800 border border-zinc-700 hover:border-emerald-400 transition-colors"
     >
       <CardHeader>
-        <CardTitle className="flex items-center">
+        <CardTitle className="flex items-center text-emerald-400">
           {feature.icon}
-          <span className="ml-2">{feature.title}</span>
+          <span className="ml-2 text-zinc-50">{feature.title}</span>
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <CardDescription>{feature.description}</CardDescription>
+        <CardDescription className="text-zinc-300">{feature.description}</CardDescription>
       </CardContent>
     </AnimatedCard>
   );
 };
 
 const TestimonialCard = ({ testimonial }) => (
-  <AnimatedCard className="bg-zinc-800/50 backdrop-blur-sm border border-zinc-700">
+  <AnimatedCard className="bg-zinc-800 border border-zinc-700 hover:border-emerald-400 transition-colors">
     <CardHeader>
       <div className="flex items-center gap-4">
         <img
@@ -61,8 +53,8 @@ const TestimonialCard = ({ testimonial }) => (
           className="w-12 h-12 rounded-full object-cover border-2 border-emerald-400"
         />
         <div>
-          <CardTitle className="text-lg">{testimonial.name}</CardTitle>
-          <CardDescription>{testimonial.role}</CardDescription>
+          <CardTitle className="text-lg text-zinc-50">{testimonial.name}</CardTitle>
+          <CardDescription className="text-zinc-400">{testimonial.role}</CardDescription>
         </div>
       </div>
     </CardHeader>
@@ -78,12 +70,12 @@ const TestimonialCard = ({ testimonial }) => (
 );
 
 const StatCard = ({ value, label, prefix = "" }) => (
-  <Card className="bg-zinc-800/50 backdrop-blur-sm border border-zinc-700">
+  <Card className="bg-zinc-800 border border-zinc-700 hover:border-emerald-400 transition-colors">
     <CardContent className="pt-6">
       <div className="text-3xl font-bold text-emerald-400 mb-2">
         <CountUp end={value} prefix={prefix} duration={2.5} />
       </div>
-      <CardDescription>{label}</CardDescription>
+      <CardDescription className="text-zinc-300">{label}</CardDescription>
     </CardContent>
   </Card>
 );
@@ -98,7 +90,7 @@ export default function LandingPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-zinc-900 via-zinc-900 to-zinc-950 text-zinc-100">
+    <div className="min-h-screen bg-gradient-to-b from-zinc-900 via-zinc-900 to-zinc-950 text-zinc-50">
       <header className="fixed top-0 left-0 right-0 z-50 border-b border-zinc-800/50 bg-zinc-900/80 backdrop-blur-md">
         <nav className="container mx-auto flex items-center justify-between p-4">
           <motion.h1
@@ -115,25 +107,25 @@ export default function LandingPage() {
           >
             <Button
               variant="ghost"
-              className="text-zinc-300 hover:text-emerald-400"
+              className="text-zinc-200 hover:text-emerald-400 hover:bg-zinc-800 transition-colors"
             >
               Features
             </Button>
             <Button
               variant="ghost"
-              className="text-zinc-300 hover:text-emerald-400"
+              className="text-zinc-200 hover:text-emerald-400 hover:bg-zinc-800 transition-colors"
             >
               How It Works
             </Button>
             <Button
               variant="ghost"
-              className="text-zinc-300 hover:text-emerald-400"
+              className="text-zinc-200 hover:text-emerald-400 hover:bg-zinc-800 transition-colors"
             >
               About
             </Button>
             <Button
               variant="outline"
-              className="border-emerald-400 text-emerald-400 hover:bg-emerald-400/10"
+              className="border-emerald-400 text-emerald-400 hover:bg-emerald-400 hover:text-zinc-900"
             >
               Get Started
             </Button>
@@ -167,14 +159,14 @@ export default function LandingPage() {
               className="bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent"
             />
           </h2>
-          <p className="mb-8 text-xl text-zinc-400 max-w-3xl mx-auto">
+          <p className="mb-8 text-xl text-zinc-300 max-w-3xl mx-auto">
             Eliminating middlemen by enabling direct, milestone-based, and
             escrow-secured payment requests between freelancers and clients
             using Request Network.
           </p>
           <div className="flex gap-4 justify-center">
             <Link to="/dashboard">
-              <Button className="bg-gradient-to-r from-emerald-500 to-teal-500 text-zinc-900 hover:from-emerald-600 hover:to-teal-600">
+              <Button className="bg-emerald-500 text-zinc-900 hover:bg-emerald-600 hover:text-zinc-50">
                 Start Your Project <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
@@ -243,37 +235,47 @@ export default function LandingPage() {
         <section className="mb-16">
           <h3 className="mb-8 text-2xl font-semibold">How It Works</h3>
           <Tabs defaultValue="freelancer" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="freelancer">For Freelancers</TabsTrigger>
-              <TabsTrigger value="client">For Clients</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 bg-zinc-800/50">
+              <TabsTrigger 
+                value="freelancer" 
+                className="text-zinc-100 data-[state=active]:bg-emerald-600 data-[state=active]:text-white"
+              >
+                For Freelancers
+              </TabsTrigger>
+              <TabsTrigger 
+                value="client" 
+                className="text-zinc-100 data-[state=active]:bg-emerald-600 data-[state=active]:text-white"
+              >
+                For Clients
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="freelancer">
-              <Card className="bg-zinc-800">
+              <Card className="bg-zinc-800/90 border border-zinc-700">
                 <CardHeader>
-                  <CardTitle>Freelancer Workflow</CardTitle>
+                  <CardTitle className="text-zinc-50">Freelancer Workflow</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ol className="list-decimal pl-5 space-y-2">
-                    <li>Create project and define milestones</li>
-                    <li>Send payment requests for each milestone</li>
-                    <li>Complete work and submit for approval</li>
-                    <li>Receive payment upon client approval</li>
+                  <ol className="list-decimal pl-5 space-y-2 text-zinc-50">
+                    <li className="text-zinc-50">Create project and define milestones</li>
+                    <li className="text-zinc-50">Send payment requests for each milestone</li>
+                    <li className="text-zinc-50">Complete work and submit for approval</li>
+                    <li className="text-zinc-50">Receive payment upon client approval</li>
                   </ol>
                 </CardContent>
               </Card>
             </TabsContent>
             <TabsContent value="client">
-              <Card className="bg-zinc-800">
+              <Card className="bg-zinc-800/90 border border-zinc-700">
                 <CardHeader>
-                  <CardTitle>Client Workflow</CardTitle>
+                  <CardTitle className="text-zinc-50">Client Workflow</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ol className="list-decimal pl-5 space-y-2">
-                    <li>Review payment request and project details</li>
-                    <li>Approve and fund escrow for milestones</li>
-                    <li>Review completed work for each milestone</li>
-                    <li>Approve or request revisions</li>
-                    <li>Release payment upon satisfaction</li>
+                  <ol className="list-decimal pl-5 space-y-2 text-zinc-50">
+                    <li className="text-zinc-50">Review payment request and project details</li>
+                    <li className="text-zinc-50">Approve and fund escrow for milestones</li>
+                    <li className="text-zinc-50">Review completed work for each milestone</li>
+                    <li className="text-zinc-50">Approve or request revisions</li>
+                    <li className="text-zinc-50">Release payment upon satisfaction</li>
                   </ol>
                 </CardContent>
               </Card>
@@ -307,7 +309,7 @@ export default function LandingPage() {
           viewport={{ once: true }}
         >
           <h3 className="mb-4 text-2xl font-semibold">Ready to Get Started?</h3>
-          <p className="mb-8 text-zinc-400">
+          <p className="mb-8 text-zinc-300">
             Join the future of decentralized freelancing and secure payments
             with Flowease.
           </p>
@@ -319,14 +321,15 @@ export default function LandingPage() {
         </motion.section>
       </main>
 
-      <footer className="border-t border-zinc-800/50 bg-zinc-900/80 backdrop-blur-sm p-12">
-        <div className="container mx-auto grid grid-cols-4 gap-8">
+      <footer className="border-t border-zinc-800 bg-zinc-900 p-12">
+        <div className="container mx-auto grid grid-cols-1 md:grid-cols-4 gap-8">
           <div>
-            <h4 className="text-lg font-semibold mb-4">Flowease</h4>
-            <p className="text-zinc-400">
+            <h4 className="text-lg font-semibold mb-4 text-emerald-400">Flowease</h4>
+            <p className="text-zinc-300">
               Building the future of decentralized payments.
             </p>
           </div>
+          {/* Add more footer content here */}
         </div>
         <div className="text-center mt-12 text-zinc-400">
           <p>&copy; 2024 Flowease. All rights reserved.</p>
@@ -359,3 +362,4 @@ const testimonials = [
       "As a freelancer, getting paid has never been easier. The platform is intuitive and secure.",
   },
 ];
+
