@@ -77,107 +77,78 @@ export class ContractInteractions {
 
   async createMilestone(freelancerAddress, amount, description, deadline) {
     try {
-        const contract = await this.getContract()
-        const provider = await this.getProvider()
-        
-        // Validate inputs before contract interaction
-        if (!ethers.isAddress(freelancerAddress)) {
-            throw new Error("Invalid freelancer address")
-        }
+      const contract = await this.getContract()
+      const provider = await this.getProvider()
+      
+      // Format parameters
+      const params = {
+        freelancer: freelancerAddress,
+        amount: amount,
+        description: description,
+        deadline: BigInt(deadline)
+      }
 
-        if (description.length === 0 || description.length > 500) {
-            throw new Error("Description must be between 1-500 characters")
-        }
+      const feeData = await provider.getFeeData()
+      
+      const txParams = {
+        value: params.amount,
+        gasPrice: feeData.gasPrice
+      }
 
-        // Validate deadline is in the future
-        const currentTimestamp = Math.floor(Date.now() / 1000)
-        if (deadline <= currentTimestamp) {
-            throw new Error("Deadline must be in the future")
-        }
-
-        const params = {
-            freelancer: freelancerAddress,
-            tokenAddress: "0x0000000000000000000000000000000000000000",
-            amount: amount,
-            description: description,
-            deadline: BigInt(deadline)
-        }
-
-        const feeData = await provider.getFeeData()
-        
-        const txParams = {
-            value: params.amount,
-            gasPrice: feeData.gasPrice
-        }
-
-        // Enhanced gas estimation with detailed logging
-        let gasLimit
-        try {
-            console.log("Estimating gas with params:", {
-                freelancer: params.freelancer,
-                tokenAddress: params.tokenAddress,
-                amount: params.amount.toString(),
-                description: params.description,
-                deadline: params.deadline.toString()
-            })
-
-            const gasEstimate = await contract.createMilestone.estimateGas(
-                params.freelancer,
-                params.tokenAddress,
-                params.amount,
-                params.description,
-                params.deadline,
-                txParams
-            )
-            gasLimit = Math.floor(Number(gasEstimate) * 1.2)
-            console.log("Estimated gas:", gasLimit)
-        } catch (gasError) {
-            console.error("Detailed gas estimation error:", {
-                message: gasError.message,
-                code: gasError.code,
-                reason: gasError.reason,
-                details: gasError
-            })
-
-            // Fallback gas limit with more conservative estimate
-            gasLimit = 500000 // Increased from previous 300000
-        }
-
-        txParams.gasLimit = gasLimit
-
-        const transaction = await contract.createMilestone(
-            params.freelancer,
-            params.tokenAddress,
-            params.amount,
-            params.description,
-            params.deadline,
-            txParams
+      // Try to estimate gas
+      let gasLimit
+      try {
+        const gasEstimate = await contract.createMilestone.estimateGas(
+          params.freelancer,
+          params.amount,
+          params.description,
+          params.deadline,
+          txParams
         )
+        gasLimit = Math.floor(Number(gasEstimate) * 1.2)
+      } catch (gasError) {
+        console.error("Gas estimation failed:", gasError)
+        gasLimit = 500000
+      }
 
-        const receipt = await transaction.wait()
-        
-        if (receipt.status === 0) {
-            throw new Error("Transaction failed on-chain")
-        }
+      txParams.gasLimit = gasLimit
 
-        return receipt.hash
+      const transaction = await contract.createMilestone(
+        params.freelancer,
+        params.amount,
+        params.description,
+        params.deadline,
+        txParams
+      )
 
+      const receipt = await transaction.wait()
+      return receipt.hash
     } catch (error) {
-        console.error("Comprehensive milestone creation error:", {
-            message: error.message,
-            code: error.code,
-            stack: error.stack,
-            details: error
-        })
-
-        // More specific error handling
-        if (error.code === 'CALL_EXCEPTION') {
-            throw new Error("Contract call failed. Check contract conditions and parameters.")
-        }
-
-        throw error
+      console.error("Error creating milestone:", error)
+      throw error
     }
-}
+  }
+
+  async createProject(title, description, budget, deadline, skills) {
+    try {
+      const contract = await this.getContract()
+      const provider = await this.getProvider()
+
+      const tx = await contract.createProject(
+        title,
+        description,
+        ethers.parseEther(budget.toString()),
+        Math.floor(deadline.getTime() / 1000),
+        skills
+      )
+
+      const receipt = await tx.wait()
+      return receipt.hash
+    } catch (error) {
+      console.error("Error creating project:", error)
+      throw error
+    }
+  }
 
   async getEscrowDetails(escrowId) {
     try {
@@ -205,16 +176,12 @@ export class ContractInteractions {
   async getAllProjects() {
     try {
       const contract = await this.getContract()
-      
-      // Get milestone counter
       const milestoneCounter = await contract.milestoneCounter()
       const projects = []
       
-      // Iterate through all milestones
+      // Iterate through milestones to get project data
       for (let i = 0; i < Number(milestoneCounter); i++) {
         const milestone = await contract.milestones(i)
-        
-        // Format the project data
         projects.push({
           id: Number(milestone.id),
           title: milestone.description,
@@ -237,10 +204,12 @@ export class ContractInteractions {
 
   getMilestoneStatus(statusCode) {
     const statuses = {
-      0: 'open',
+      0: 'pending',
       1: 'in_progress',
-      2: 'completed',
-      3: 'disputed'
+      2: 'submitted',
+      3: 'approved',
+      4: 'disputed',
+      5: 'rejected'
     }
     return statuses[statusCode] || 'unknown'
   }
@@ -265,24 +234,6 @@ export class ContractInteractions {
       return tx.hash
     } catch (error) {
       console.error("Error disputing escrow:", error)
-      throw error
-    }
-  }
-
-  async createProject(title, description, budget, deadline, skills) {
-    try {
-      const contract = await this.getContract()
-      const tx = await contract.createProject(
-        title,
-        description,
-        ethers.parseEther(budget.toString()),
-        deadline,
-        skills.split(',').map(s => s.trim())
-      )
-      await tx.wait()
-      return tx.hash
-    } catch (error) {
-      console.error("Error creating project:", error)
       throw error
     }
   }

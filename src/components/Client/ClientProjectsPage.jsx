@@ -57,26 +57,33 @@ const ClientProjectsPage = () => {
         e.preventDefault();
         try {
             setLoading(true);
-            const deadlineTimestamp = Math.floor(new Date(newProject.deadline).getTime() / 1000);
+            
+            // Validate inputs
+            if (!newProject.title || !newProject.description || !newProject.budget || !newProject.deadline) {
+                throw new Error("Please fill in all required fields");
+            }
 
-            // First create the project
-            const projectTx = await contractInteractions.createProject(
+            // Validate budget is a positive number
+            const budgetNum = parseFloat(newProject.budget);
+            if (isNaN(budgetNum) || budgetNum <= 0) {
+                throw new Error("Please enter a valid budget amount");
+            }
+
+            // Validate deadline is in the future
+            const deadlineDate = new Date(newProject.deadline);
+            if (deadlineDate <= new Date()) {
+                throw new Error("Deadline must be in the future");
+            }
+
+            // Create project
+            const skills = newProject.skills.split(',').map(skill => skill.trim()).filter(Boolean);
+            
+            await contractInteractions.createProject(
                 newProject.title,
                 newProject.description,
-                newProject.budget,
-                deadlineTimestamp,
-                newProject.skills
-            );
-
-            // Then create the escrow for the project
-            await contractInteractions.createEscrow(
-                projectTx.events[0].args.projectId, // Get the project ID from the event
-                ethers.parseEther(newProject.budget),
-                [{
-                    description: "Initial milestone",
-                    amount: newProject.budget
-                }],
-                deadlineTimestamp
+                budgetNum.toString(),
+                deadlineDate,
+                skills
             );
 
             toast({
@@ -90,7 +97,7 @@ const ClientProjectsPage = () => {
             console.error("Error creating project:", error);
             toast({
                 title: "Error",
-                description: "Failed to create project",
+                description: error.message || "Failed to create project",
                 variant: "destructive"
             });
         } finally {

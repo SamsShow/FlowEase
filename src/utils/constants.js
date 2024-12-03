@@ -1,4 +1,4 @@
-export const contractAddress = "0xb27dcfA63e6A6bb8000212F82a51eb93C8F541dF"; // Replace with your deployed contract address
+export const contractAddress = "0x782b79661679ADCC90af2476B14DE105B6186562"; // Replace with your deployed contract address
 
 export const contractABI = [
   // getUserProfile function
