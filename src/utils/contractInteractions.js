@@ -134,16 +134,36 @@ export class ContractInteractions {
       const contract = await this.getContract()
       const provider = await this.getProvider()
 
-      const tx = await contract.createProject(
+      // Ensure budget is a valid number before parsing
+      const parsedBudget = ethers.parseEther(budget.toString())
+      
+      // Ensure deadline is a number
+      const deadlineTimestamp = BigInt(Math.floor(deadline))
+
+      // Ensure skills is an array
+      const skillsArray = Array.isArray(skills) ? skills : []
+
+      // Estimate gas first
+      const gasEstimate = await contract.createProject.estimateGas(
         title,
         description,
-        ethers.parseEther(budget.toString()),
-        Math.floor(deadline.getTime() / 1000),
-        skills
+        parsedBudget,
+        deadlineTimestamp,
+        skillsArray
       )
 
-      const receipt = await tx.wait()
-      return receipt.hash
+      // Add 20% buffer to gas estimate
+      const gasLimit = (BigInt(gasEstimate) * BigInt(120)) / BigInt(100)
+
+      // Send the transaction and return the transaction object
+      return await contract.createProject(
+        title,
+        description,
+        parsedBudget,
+        deadlineTimestamp,
+        skillsArray,
+        { gasLimit }
+      )
     } catch (error) {
       console.error("Error creating project:", error)
       throw error
@@ -175,43 +195,52 @@ export class ContractInteractions {
 
   async getAllProjects() {
     try {
-      const contract = await this.getContract()
-      const milestoneCounter = await contract.milestoneCounter()
-      const projects = []
+      const contract = await this.getContract();
+      const projectsData = await contract.getAllProjects();
       
-      // Iterate through milestones to get project data
-      for (let i = 0; i < Number(milestoneCounter); i++) {
-        const milestone = await contract.milestones(i)
-        projects.push({
-          id: Number(milestone.id),
-          title: milestone.description,
-          description: milestone.description,
-          budget: ethers.formatEther(milestone.amount),
-          deadline: Number(milestone.deadline),
-          client: milestone.client,
-          freelancer: milestone.freelancer,
-          status: this.getMilestoneStatus(Number(milestone.status)),
-          createdAt: Number(milestone.createdAt)
-        })
-      }
-      
-      return projects
+      console.log("Raw projects data:", projectsData);
+
+      // Destructure the returned arrays
+      const [ids, clients, titles, budgets, deadlines, statuses] = projectsData;
+
+      // Combine the arrays into an array of project objects
+      const projects = ids.map((id, index) => {
+        try {
+          return {
+            id: id.toString(),
+            client: clients[index],
+            title: titles[index],
+            description: titles[index], // Since description isn't returned by getAllProjects
+            budget: ethers.formatEther(budgets[index]),
+            deadline: deadlines[index].toString(),
+            status: this.getProjectStatus(statuses[index]),
+            timestamp: deadlines[index].toString(), // Using deadline as timestamp since it's not returned
+            skills: [] // Skills aren't returned by getAllProjects
+          };
+        } catch (itemError) {
+          console.error("Error processing project item:", itemError);
+          return null;
+        }
+      }).filter(Boolean); // Remove any null entries
+
+      console.log("Processed projects:", projects);
+      return projects;
+
     } catch (error) {
-      console.error("Error fetching projects:", error)
-      throw error
+      console.error("Error in getAllProjects:", error);
+      throw error;
     }
   }
 
-  getMilestoneStatus(statusCode) {
+  getProjectStatus(statusCode) {
     const statuses = {
-      0: 'pending',
+      0: 'open',
       1: 'in_progress',
-      2: 'submitted',
-      3: 'approved',
-      4: 'disputed',
-      5: 'rejected'
-    }
-    return statuses[statusCode] || 'unknown'
+      2: 'completed',
+      3: 'cancelled',
+      4: 'disputed'
+    };
+    return statuses[statusCode] || 'unknown';
   }
 
   async releaseMilestone(escrowId, milestoneIndex) {

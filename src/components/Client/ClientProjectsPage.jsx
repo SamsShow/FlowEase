@@ -35,12 +35,29 @@ const ClientProjectsPage = () => {
 
     const fetchClientProjects = async () => {
         try {
+            setLoading(true);
             const allProjects = await contractInteractions.getAllProjects();
+            
+            console.log("All projects:", allProjects);
+            console.log("Current address:", address);
+            
             // Filter projects where the client is the current user
-            const clientProjects = allProjects.filter(
-                project => project.client.toLowerCase() === address.toLowerCase()
+            const clientProjects = allProjects.filter(project => {
+                const isMatch = project.client && 
+                    project.client.toLowerCase() === address.toLowerCase();
+                console.log("Project:", project.id, "Client:", project.client, "Match:", isMatch);
+                return isMatch;
+            });
+
+            console.log("Filtered client projects:", clientProjects);
+
+            // Sort projects by creation time (newest first)
+            const sortedProjects = clientProjects.sort((a, b) => 
+                Number(b.timestamp) - Number(a.timestamp)
             );
-            setProjects(clientProjects);
+            
+            console.log("Sorted projects:", sortedProjects);
+            setProjects(sortedProjects);
         } catch (error) {
             console.error("Error fetching projects:", error);
             toast({
@@ -76,23 +93,50 @@ const ClientProjectsPage = () => {
             }
 
             // Create project
-            const skills = newProject.skills.split(',').map(skill => skill.trim()).filter(Boolean);
-            
-            await contractInteractions.createProject(
+            const tx = await contractInteractions.createProject(
                 newProject.title,
                 newProject.description,
-                budgetNum.toString(),
-                deadlineDate,
-                skills
+                newProject.budget,
+                Math.floor(new Date(newProject.deadline).getTime() / 1000),
+                newProject.skills.split(',').map(skill => skill.trim()).filter(Boolean)
             );
 
+            console.log("Transaction sent:", tx);
+
+            // Show pending toast
+            toast({
+                title: "Transaction Pending",
+                description: "Your project creation transaction is being processed...",
+            });
+
+            // Wait for the transaction to be mined
+            const receipt = await tx.wait();
+            console.log("Transaction receipt:", receipt);
+
+            // Reset form
+            setNewProject({
+                title: '',
+                description: '',
+                budget: '',
+                deadline: '',
+                skills: '',
+                category: 'development'
+            });
+
+            // Close modal
+            setShowCreateModal(false);
+
+            // Show success toast
             toast({
                 title: "Success",
                 description: "Project created successfully!"
             });
 
-            setShowCreateModal(false);
-            fetchClientProjects();
+            // Add delay before fetching updated projects
+            setTimeout(() => {
+                fetchClientProjects();
+            }, 2000);
+
         } catch (error) {
             console.error("Error creating project:", error);
             toast({
@@ -262,7 +306,7 @@ const ProjectCard = ({ project }) => {
                     <div>
                         <CardTitle>{project.title}</CardTitle>
                         <CardDescription>
-                            Created: {new Date(project.deadline * 1000).toLocaleDateString()}
+                            Created: {new Date(Number(project.deadline) * 1000).toLocaleDateString()}
                         </CardDescription>
                     </div>
                     <Badge variant={
@@ -283,7 +327,7 @@ const ProjectCard = ({ project }) => {
                     </div>
                     <div className="flex justify-between">
                         <span className="text-sm text-gray-500">Deadline:</span>
-                        <span>{new Date(project.deadline * 1000).toLocaleDateString()}</span>
+                        <span>{new Date(Number(project.deadline) * 1000).toLocaleDateString()}</span>
                     </div>
                     <Button 
                         className="w-full mt-4"
