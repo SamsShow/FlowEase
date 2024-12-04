@@ -10,6 +10,7 @@ import { Button } from './ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from './ui/select'
 import { toast } from './ui/use-toast'
 import { contractInteractions } from '../utils/contractInteractions'
+import { BigInt } from 'ethers';
 
 // Utility function for robust input validation
 const validateInputs = (formData) => {
@@ -70,7 +71,7 @@ const PaymentRequest = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
+
     // Initial connection check
     if (!isConnected) {
       toast({
@@ -84,7 +85,7 @@ const PaymentRequest = () => {
     // Validate inputs
     const validationErrors = validateInputs(formData)
     if (validationErrors.length > 0) {
-      validationErrors.forEach(error => 
+      validationErrors.forEach(error =>
         toast({
           title: "Validation Error",
           description: error,
@@ -98,11 +99,11 @@ const PaymentRequest = () => {
     try {
       // Robust deadline conversion
       const deadlineTimestamp = Math.floor(new Date(formData.deadline).getTime() / 1000)
-      
+
       // Dynamic decimal handling
-      const decimals = formData.currency === 'ETH' ? 18 : 
-                       formData.currency === 'USDC' ? 6 : 
-                       formData.currency === 'DAI' ? 18 : 18
+      const decimals = formData.currency === 'ETH' ? 18 :
+        formData.currency === 'USDC' ? 6 :
+          formData.currency === 'DAI' ? 18 : 18
 
       // Safe parsing of amount
       const parsedAmount = ethers.parseUnits(formData.amount.toString(), decimals)
@@ -127,6 +128,8 @@ const PaymentRequest = () => {
       console.log('Creating milestone with params:', transactionParams)
 
       // Gas estimation with error handling
+
+
       let gasEstimate;
       try {
         gasEstimate = await contract.createMilestone.estimateGas(
@@ -135,15 +138,23 @@ const PaymentRequest = () => {
           transactionParams.amount,
           transactionParams.description,
           transactionParams.deadline,
-          { value: transactionParams.value || 0 }
-        )
+          { value: transactionParams.value || 0n } // Ensure `value` is a BigInt
+        );
+
+        if (!gasEstimate) {
+          throw new Error('Gas estimate returned undefined or null');
+        }
       } catch (estimationError) {
-        console.error('Gas estimation failed:', estimationError)
-        throw new Error('Unable to estimate gas. Transaction might fail.')
+        console.error('Gas estimation failed:', estimationError);
+        throw new Error('Unable to estimate gas. Transaction might fail.');
       }
 
+      // Convert gas estimate to BigInt if not already
+      const gasEstimateBigInt = BigInt(gasEstimate);
+
       // Add 20% buffer to gas estimate
-      const gasLimit = Math.floor(gasEstimate * 1.2)
+      const gasLimit = (gasEstimateBigInt * 120n) / 100n; // Using BigInt arithmetic
+
 
       // Execute transaction
       const tx = await contract.createMilestone(
@@ -152,15 +163,15 @@ const PaymentRequest = () => {
         transactionParams.amount,
         transactionParams.description,
         transactionParams.deadline,
-        { 
+        {
           value: transactionParams.value || 0,
-          gasLimit 
+          gasLimit
         }
       )
 
       // Wait for transaction confirmation
       const receipt = await tx.wait()
-      
+
       toast({
         title: "Success",
         description: "Payment request created successfully!",
@@ -172,10 +183,10 @@ const PaymentRequest = () => {
 
     } catch (error) {
       console.error('Transaction Error:', error)
-      
+
       // Comprehensive error handling
-      const errorMessage = error.reason || 
-        error.message || 
+      const errorMessage = error.reason ||
+        error.message ||
         "An unexpected error occurred during payment request creation"
 
       toast({
@@ -258,7 +269,7 @@ const PaymentRequest = () => {
                 <Label htmlFor="currency">Currency</Label>
                 <Select
                   value={formData.currency}
-                  onValueChange={(value) => 
+                  onValueChange={(value) =>
                     setFormData(prev => ({ ...prev, currency: value }))
                   }
                 >
