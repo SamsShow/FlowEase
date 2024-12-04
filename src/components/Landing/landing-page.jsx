@@ -125,7 +125,7 @@ export default function LandingPage() {
             </Button>
             <Button
               variant="outline"
-              className="border-emerald-400 text-emerald-400 hover:bg-emerald-400 hover:text-zinc-900"
+              className="border-emerald-400 bg-emerald-400 text-black hover:bg-emerald-600 hover:text-white"
             >
               Get Started
             </Button>
@@ -172,7 +172,7 @@ export default function LandingPage() {
             </Link>
             <Button
               variant="outline"
-              className="border-zinc-700 hover:bg-zinc-800"
+              className="border-zinc-700 bg-transparent hover:bg-zinc-800 hover:text-white"
             >
               Watch Demo
             </Button>
