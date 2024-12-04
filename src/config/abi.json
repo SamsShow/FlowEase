@@ -43,13 +43,33 @@
 	},
 	{
 		"inputs": [],
-		"name": "TokenNotSupported",
+		"name": "UnauthorizedAccess",
 		"type": "error"
 	},
 	{
-		"inputs": [],
-		"name": "UnauthorizedAccess",
-		"type": "error"
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "milestoneId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "deliverablesHash",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
+			}
+		],
+		"name": "DeliverablesSubmitted",
+		"type": "event"
 	},
 	{
 		"anonymous": false,
@@ -318,25 +338,6 @@
 	{
 		"inputs": [
 			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"name": "allowedTokens",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
 				"internalType": "uint256",
 				"name": "_milestoneId",
 				"type": "uint256"
@@ -350,18 +351,8 @@
 	{
 		"inputs": [
 			{
-				"internalType": "uint256",
-				"name": "_projectId",
-				"type": "uint256"
-			},
-			{
 				"internalType": "address",
 				"name": "_freelancer",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "_tokenAddress",
 				"type": "address"
 			},
 			{
@@ -532,6 +523,65 @@
 	{
 		"inputs": [
 			{
+				"internalType": "uint256",
+				"name": "_milestoneId",
+				"type": "uint256"
+			}
+		],
+		"name": "getMilestoneDetails",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "id",
+				"type": "uint256"
+			},
+			{
+				"internalType": "address",
+				"name": "freelancer",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "client",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "description",
+				"type": "string"
+			},
+			{
+				"internalType": "enum FlowEasePaymentSystem.MilestoneStatus",
+				"name": "status",
+				"type": "uint8"
+			},
+			{
+				"internalType": "uint256",
+				"name": "createdAt",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "deadline",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "deliverablesHash",
+				"type": "string"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
 				"internalType": "address",
 				"name": "_user",
 				"type": "address"
@@ -568,6 +618,25 @@
 				"internalType": "uint256",
 				"name": "milestoneId",
 				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "_user",
+				"type": "address"
+			}
+		],
+		"name": "getUserMilestones",
+		"outputs": [
+			{
+				"internalType": "uint256[]",
+				"name": "",
+				"type": "uint256[]"
 			}
 		],
 		"stateMutability": "view",
@@ -685,18 +754,8 @@
 				"type": "address"
 			},
 			{
-				"internalType": "address",
-				"name": "tokenAddress",
-				"type": "address"
-			},
-			{
 				"internalType": "uint256",
 				"name": "amount",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "platformFee",
 				"type": "uint256"
 			},
 			{
@@ -718,6 +777,11 @@
 				"internalType": "uint256",
 				"name": "deadline",
 				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "deliverablesHash",
+				"type": "string"
 			}
 		],
 		"stateMutability": "view",
@@ -860,6 +924,11 @@
 				"internalType": "uint256",
 				"name": "_milestoneId",
 				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "_deliverablesHash",
+				"type": "string"
 			}
 		],
 		"name": "submitMilestone",
@@ -1012,24 +1081,6 @@
 			}
 		],
 		"name": "voteOnDispute",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "_token",
-				"type": "address"
-			},
-			{
-				"internalType": "bool",
-				"name": "_status",
-				"type": "bool"
-			}
-		],
-		"name": "whitelistToken",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"

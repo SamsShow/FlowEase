@@ -32,13 +32,12 @@ contract FlowEasePaymentSystem is Ownable, ReentrancyGuard {
         uint256 id;
         address freelancer;
         address client;
-        address tokenAddress;
         uint256 amount;
-        uint256 platformFee;
         string description;
         MilestoneStatus status;
         uint256 createdAt;
         uint256 deadline;
+        string deliverablesHash;
     }
 
     struct Dispute {
@@ -77,7 +76,6 @@ contract FlowEasePaymentSystem is Ownable, ReentrancyGuard {
     mapping(uint256 => Milestone) public milestones;
     mapping(uint256 => Dispute) public disputes;
     mapping(address => uint256) public userReputation;
-    mapping(address => bool) public allowedTokens;
     mapping(address => UserProfile) public userProfiles;
     mapping(address => bool) public verifiedUsers;
     mapping(uint256 => mapping(address => bool)) public milestoneReviewed;
@@ -91,7 +89,6 @@ contract FlowEasePaymentSystem is Ownable, ReentrancyGuard {
     error InvalidMilestoneStatus();
     error UnauthorizedAccess();
     error DisputeAlreadyResolved();
-    error TokenNotSupported();
 
     // Events
     event MilestoneCreated(
@@ -156,112 +153,82 @@ contract FlowEasePaymentSystem is Ownable, ReentrancyGuard {
         platformWallet = msg.sender;
     }
 
-    // Token Whitelist Management
-    function whitelistToken(address _token, bool _status) external onlyOwner {
-        allowedTokens[_token] = _status;
-    }
-
     // Milestone Creation
     function createMilestone(
-        uint256 _projectId,
         address _freelancer,
-        address _tokenAddress,
         uint256 _amount,
         string memory _description,
         uint256 _deadline
     ) external payable nonReentrant {
-        require(_projectId <= projectCounter, "Invalid project ID");
-        Project storage project = projects[_projectId];
-        require(project.status == ProjectStatus.OPEN, "Project not open");
-        require(msg.sender == project.client, "Not project owner");
-        require(_deadline <= project.deadline, "Deadline exceeds project deadline");
-
-        // Validate token and handle transfer
-        if (_tokenAddress != address(0)) {
-            require(allowedTokens[_tokenAddress], "Token not supported");
-            IERC20 token = IERC20(_tokenAddress);
-            uint256 platformFee = calculatePlatformFee(_amount);
-            uint256 totalAmount = _amount + platformFee;
-            require(
-                token.transferFrom(msg.sender, address(this), totalAmount),
-                "Token transfer failed"
-            );
-        } else {
-            require(msg.value == _amount, "Incorrect ETH amount");
-        }
+        require(_freelancer != address(0), "Invalid freelancer address");
+        require(_amount > 0, "Amount must be greater than 0");
+        require(_deadline > block.timestamp, "Invalid deadline");
+        require(msg.value > 0, "No ETH sent");
+        require(msg.value == _amount, "ETH amount must match milestone amount");
 
         uint256 milestoneId = ++milestoneCounter;
-        
         milestones[milestoneId] = Milestone({
             id: milestoneId,
             freelancer: _freelancer,
             client: msg.sender,
-            tokenAddress: _tokenAddress,
             amount: _amount,
-            platformFee: calculatePlatformFee(_amount),
             description: _description,
             status: MilestoneStatus.PENDING,
             createdAt: block.timestamp,
-            deadline: _deadline
+            deadline: _deadline,
+            deliverablesHash: ""
         });
-
-        // Update project
-        project.milestoneIds.push(milestoneId);
-        if (project.status == ProjectStatus.OPEN) {
-            project.status = ProjectStatus.IN_PROGRESS;
-            emit ProjectStatusUpdated(_projectId, ProjectStatus.IN_PROGRESS);
-        }
 
         emit MilestoneCreated(milestoneId, _freelancer, msg.sender, _amount);
     }
 
-    // Freelancer Submits Milestone
-    function submitMilestone(uint256 _milestoneId) external {
-        Milestone storage milestone = milestones[_milestoneId];
-        
-        // Validate access and status
-        if (msg.sender != milestone.freelancer) 
-            revert UnauthorizedAccess();
-        
-        if (milestone.status != MilestoneStatus.PENDING) 
-            revert InvalidMilestoneStatus();
+    // Helper function to convert uint to string
+    function toString(uint256 value) internal pure returns (string memory) {
+        if (value == 0) {
+            return "0";
+        }
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
+            value /= 10;
+        }
+        return string(buffer);
+    }
 
-        // Update milestone status
+    // Freelancer Submits Milestone
+    function submitMilestone(
+        uint256 _milestoneId,
+        string memory _deliverablesHash
+    ) external {
+        Milestone storage milestone = milestones[_milestoneId];
+        require(milestone.freelancer == msg.sender, "Not authorized");
+        require(milestone.status == MilestoneStatus.IN_PROGRESS, "Invalid status");
+        require(bytes(_deliverablesHash).length > 0, "Deliverables hash required");
+
         milestone.status = MilestoneStatus.SUBMITTED;
+        milestone.deliverablesHash = _deliverablesHash;
+
         emit MilestoneStatusChanged(_milestoneId, MilestoneStatus.SUBMITTED);
     }
 
     // Client Approves Milestone
-    function approveMilestone(uint256 _milestoneId) external nonReentrant {
+    function approveMilestone(uint256 _milestoneId) external {
         Milestone storage milestone = milestones[_milestoneId];
         
-        // Validate access and status
-        if (msg.sender != milestone.client) 
-            revert UnauthorizedAccess();
-        
-        if (milestone.status != MilestoneStatus.SUBMITTED) 
-            revert InvalidMilestoneStatus();
+        require(milestone.client == msg.sender, "Not authorized");
 
-        IERC20 token = IERC20(milestone.tokenAddress);
-        
-        // Transfer funds to freelancer
-        require(
-            token.transfer(milestone.freelancer, milestone.amount), 
-            "Freelancer payment failed"
-        );
+        // Handle ETH payment directly to freelancer
+        (bool success, ) = milestone.freelancer.call{value: milestone.amount}("");
+        require(success, "ETH transfer failed");
 
-        // Transfer platform fee
-        require(
-            token.transfer(platformWallet, milestone.platformFee), 
-            "Platform fee transfer failed"
-        );
-
-        // Update milestone status and reputation
         milestone.status = MilestoneStatus.APPROVED;
-        userReputation[milestone.freelancer] += 10;
-
-        // Update completed jobs count
-        userProfiles[milestone.freelancer].completedJobs++;
 
         emit MilestoneStatusChanged(_milestoneId, MilestoneStatus.APPROVED);
     }
@@ -330,22 +297,16 @@ contract FlowEasePaymentSystem is Ownable, ReentrancyGuard {
         if (block.timestamp < dispute.votingDeadline) 
             revert UnauthorizedAccess();
 
-        IERC20 token = IERC20(milestone.tokenAddress);
-
+        // Handle ETH payment
+        (bool success, ) = milestone.freelancer.call{value: milestone.amount}("");
+        require(success, "ETH transfer failed");
+        
         if (dispute.votesForFreelancer > dispute.votesForClient) {
             // Resolve in favor of freelancer
-            require(
-                token.transfer(milestone.freelancer, milestone.amount), 
-                "Freelancer payment failed"
-            );
             dispute.outcome = DisputeOutcome.RESOLVED_FOR_FREELANCER;
             milestone.status = MilestoneStatus.APPROVED;
         } else {
             // Resolve in favor of client
-            require(
-                token.transfer(milestone.client, milestone.amount), 
-                "Client refund failed"
-            );
             dispute.outcome = DisputeOutcome.RESOLVED_FOR_CLIENT;
             milestone.status = MilestoneStatus.REJECTED;
         }
@@ -364,13 +325,9 @@ contract FlowEasePaymentSystem is Ownable, ReentrancyGuard {
         if (block.timestamp < milestone.deadline + 30 days) 
             revert UnauthorizedAccess();
 
-        IERC20 token = IERC20(_token);
-        uint256 balance = token.balanceOf(address(this));
-
-        require(
-            token.transfer(platformWallet, balance), 
-            "Stale funds withdrawal failed"
-        );
+        // Handle ETH payment
+        (bool success, ) = milestone.freelancer.call{value: milestone.amount}("");
+        require(success, "ETH transfer failed");
     }
 
     // Fallback Functions
@@ -556,5 +513,57 @@ contract FlowEasePaymentSystem is Ownable, ReentrancyGuard {
     event ProjectStatusUpdated(
         uint256 indexed projectId,
         ProjectStatus status
+    );
+
+    // Get milestone details with all related data
+    function getMilestoneDetails(uint256 _milestoneId) external view returns (
+        uint256 id,
+        address freelancer,
+        address client,
+        uint256 amount,
+        string memory description,
+        MilestoneStatus status,
+        uint256 createdAt,
+        uint256 deadline,
+        string memory deliverablesHash
+    ) {
+        Milestone storage milestone = milestones[_milestoneId];
+        return (
+            milestone.id,
+            milestone.freelancer,
+            milestone.client,
+            milestone.amount,
+            milestone.description,
+            milestone.status,
+            milestone.createdAt,
+            milestone.deadline,
+            milestone.deliverablesHash
+        );
+    }
+
+    // Get all milestones for a user (either as client or freelancer)
+    function getUserMilestones(address _user) external view returns (uint256[] memory) {
+        uint256[] memory userMilestones = new uint256[](milestoneCounter);
+        uint256 count = 0;
+        
+        for (uint256 i = 1; i <= milestoneCounter; i++) {
+            if (milestones[i].client == _user || milestones[i].freelancer == _user) {
+                userMilestones[count] = i;
+                count++;
+            }
+        }
+        
+        // Resize array to actual count
+        assembly {
+            mstore(userMilestones, count)
+        }
+        
+        return userMilestones;
+    }
+
+    event DeliverablesSubmitted(
+        uint256 indexed milestoneId,
+        string deliverablesHash,
+        uint256 timestamp
     );
 }

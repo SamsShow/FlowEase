@@ -23,13 +23,17 @@ import { Badge } from "../ui/badge";
 import { toast } from "../ui/use-toast";
 import { SearchFilter } from "../Search/SearchFilter";
 import { Label } from "../ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { Plus, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
 
 const ExplorePage = () => {
   const { address } = useAccount();
   const [projects, setProjects] = useState([]);
+  const [milestones, setMilestones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [filteredProjects, setFilteredProjects] = useState([]);
+  const [filteredMilestones, setFilteredMilestones] = useState([]);
   const [newProject, setNewProject] = useState({
     title: "",
     description: "",
@@ -45,27 +49,39 @@ const ExplorePage = () => {
   });
 
   useEffect(() => {
-    fetchProjects();
+    fetchData();
   }, []);
 
-  const fetchProjects = async () => {
+  const fetchData = async () => {
     try {
-      const allProjects = await contractInteractions.getAllProjects();
+      setLoading(true);
+      const [allProjects, allMilestones] = await Promise.all([
+        contractInteractions.getAllProjects(),
+        contractInteractions.getAllMilestones()
+      ]);
+
+      // Process projects
       const uniqueProjects = Array.from(
         new Map(allProjects.map((project) => [project.id, project])).values()
       );
-
       const sortedProjects = uniqueProjects.sort(
+        (a, b) => b.createdAt - a.createdAt
+      );
+
+      // Process milestones
+      const sortedMilestones = allMilestones.sort(
         (a, b) => b.createdAt - a.createdAt
       );
 
       setProjects(sortedProjects);
       setFilteredProjects(sortedProjects);
+      setMilestones(sortedMilestones);
+      setFilteredMilestones(sortedMilestones);
     } catch (error) {
-      console.error("Error fetching projects:", error);
+      console.error("Error fetching data:", error);
       toast({
         title: "Error",
-        description: "Failed to load projects",
+        description: "Failed to load data",
         variant: "destructive",
       });
     } finally {
@@ -125,7 +141,7 @@ const ExplorePage = () => {
         });
 
         setShowCreateModal(false);
-        await fetchProjects();
+        await fetchData();
 
         // Reset form
         setNewProject({
@@ -218,12 +234,22 @@ const ExplorePage = () => {
 
       const deadlineTimestamp = Math.floor(deadlineDate.getTime() / 1000);
 
-      await contractInteractions.createMilestone(
+      console.log('Creating milestone with params:', {
+        freelancer: newMilestone.freelancer,
+        amount: amount.toString(),
+        deadline: deadlineTimestamp,
+        description: newMilestone.description
+      });
+
+      // Create milestone with exact ETH value
+      const tx = await contractInteractions.createMilestone(
         newMilestone.freelancer,
         amount,
         newMilestone.description,
         deadlineTimestamp
       );
+
+      await tx.wait();
 
       toast({
         title: "Success",
@@ -231,7 +257,7 @@ const ExplorePage = () => {
       });
 
       setShowCreateModal(false);
-      await fetchProjects();
+      await fetchData();
       
       // Reset form
       setNewMilestone({
@@ -259,66 +285,73 @@ const ExplorePage = () => {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Explore Projects</h1>
-        <Button onClick={() => setShowCreateModal(true)}>
-          Create New Project
-        </Button>
+        <h1 className="text-2xl font-bold">Explore</h1>
+        <div className="space-x-4">
+          <Button onClick={() => setShowCreateModal(true)}>
+            Create New Project
+          </Button>
+        </div>
       </div>
 
       <div className="mb-6">
         <SearchFilter onSearch={handleSearch} onFilter={handleFilter} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProjects.map((project) => (
-          <Card key={project.id} className="flex flex-col">
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle>{project.title}</CardTitle>
-                  <CardDescription>
-                    Posted by: {project.client.slice(0, 6)}...
-                    {project.client.slice(-4)}
-                  </CardDescription>
-                </div>
-                <Badge
-                  variant={
-                    project.status === "open"
-                      ? "default"
-                      : project.status === "in_progress"
-                      ? "secondary"
-                      : "outline"
-                  }
-                >
-                  {project.status}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="flex-1 flex flex-col">
-              <p className="text-gray-600 mb-4 flex-1">{project.description}</p>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">Budget:</span>
-                  <span className="font-medium">{project.budget} ETH</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">Deadline:</span>
-                  <span>
-                    {new Date(project.deadline * 1000).toLocaleDateString()}
-                  </span>
-                </div>
-                <Button
-                  className="w-full mt-4"
-                  variant="outline"
-                  onClick={() => {}}
-                >
-                  View Details
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <Tabs defaultValue="projects" className="w-full">
+        <TabsList>
+          <TabsTrigger value="projects">Projects</TabsTrigger>
+          <TabsTrigger value="milestones">Milestones</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="projects">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredProjects.map((project) => (
+              <ProjectCard key={project.id} project={project} />
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="milestones">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredMilestones.map((milestone) => (
+              <Card key={milestone.id} className="flex flex-col">
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle>Milestone #{milestone.id}</CardTitle>
+                      <CardDescription>
+                        Freelancer: {milestone.freelancer.slice(0, 6)}...
+                        {milestone.freelancer.slice(-4)}
+                      </CardDescription>
+                    </div>
+                    <Badge variant={
+                      milestone.status === 'approved' ? 'default' :
+                      milestone.status === 'in_progress' ? 'secondary' :
+                      milestone.status === 'disputed' ? 'destructive' :
+                      'outline'
+                    }>
+                      {milestone.status}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex-1">
+                  <div className="space-y-4">
+                    <p className="text-gray-600">{milestone.description}</p>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500">Amount:</span>
+                      <span className="font-medium">{milestone.amount} ETH</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500">Deadline:</span>
+                      <span>{new Date(milestone.deadline * 1000).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
         <DialogContent>
@@ -407,5 +440,55 @@ const ExplorePage = () => {
     </div>
   );
 };
+
+// Helper component for project cards
+const ProjectCard = ({ project }) => (
+  <Card className="flex flex-col">
+    <CardHeader>
+      <div className="flex justify-between items-start">
+        <div>
+          <CardTitle>{project.title}</CardTitle>
+          <CardDescription>
+            Posted by: {project.client.slice(0, 6)}...
+            {project.client.slice(-4)}
+          </CardDescription>
+        </div>
+        <Badge
+          variant={
+            project.status === "open"
+              ? "default"
+              : project.status === "in_progress"
+              ? "secondary"
+              : "outline"
+          }
+        >
+          {project.status}
+        </Badge>
+      </div>
+    </CardHeader>
+    <CardContent className="flex-1 flex flex-col">
+      <p className="text-gray-600 mb-4 flex-1">{project.description}</p>
+      <div className="space-y-2">
+        <div className="flex justify-between">
+          <span className="text-sm text-gray-500">Budget:</span>
+          <span className="font-medium">{project.budget} ETH</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-sm text-gray-500">Deadline:</span>
+          <span>
+            {new Date(project.deadline * 1000).toLocaleDateString()}
+          </span>
+        </div>
+        <Button
+          className="w-full mt-4"
+          variant="outline"
+          onClick={() => {}}
+        >
+          View Details
+        </Button>
+      </div>
+    </CardContent>
+  </Card>
+);
 
 export default ExplorePage;

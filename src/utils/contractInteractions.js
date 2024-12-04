@@ -75,57 +75,37 @@ export class ContractInteractions {
     }
   }
 
-  async createMilestone(freelancerAddress, amount, description, deadline) {
+  async createMilestone(freelancer, amount, description, deadline) {
     try {
-      const contract = await this.getContract()
-      const provider = await this.getProvider()
+      const contract = await this.getContract();
       
-      // Format parameters
-      const params = {
-        freelancer: freelancerAddress,
-        amount: amount,
-        description: description,
-        deadline: BigInt(deadline)
-      }
+      // Convert amount to Wei if it's not already
+      const amountInWei = typeof amount === 'string' || typeof amount === 'number' 
+        ? ethers.parseEther(amount.toString())
+        : amount;
 
-      const feeData = await provider.getFeeData()
-      
-      const txParams = {
-        value: params.amount,
-        gasPrice: feeData.gasPrice
-      }
+      console.log('Creating milestone with:', {
+        freelancer,
+        amount: amountInWei.toString(),
+        description,
+        deadline
+      });
 
-      // Try to estimate gas
-      let gasLimit
-      try {
-        const gasEstimate = await contract.createMilestone.estimateGas(
-          params.freelancer,
-          params.amount,
-          params.description,
-          params.deadline,
-          txParams
-        )
-        gasLimit = Math.floor(Number(gasEstimate) * 1.2)
-      } catch (gasError) {
-        console.error("Gas estimation failed:", gasError)
-        gasLimit = 500000
-      }
+      // Send transaction with exact ETH value
+      const tx = await contract.createMilestone(
+        freelancer,
+        amountInWei,
+        description,
+        deadline,
+        { 
+          value: amountInWei // Send exact amount as ETH value
+        }
+      );
 
-      txParams.gasLimit = gasLimit
-
-      const transaction = await contract.createMilestone(
-        params.freelancer,
-        params.amount,
-        params.description,
-        params.deadline,
-        txParams
-      )
-
-      const receipt = await transaction.wait()
-      return receipt.hash
+      return tx;
     } catch (error) {
-      console.error("Error creating milestone:", error)
-      throw error
+      console.error('Error creating milestone:', error);
+      throw error;
     }
   }
 
@@ -285,6 +265,105 @@ export class ContractInteractions {
       console.error("Error fetching escrow:", error)
       throw error
     }
+  }
+
+  async getMilestoneDetails(milestoneId) {
+    try {
+      const contract = await this.getContract();
+      const details = await contract.getMilestoneDetails(milestoneId);
+      return {
+        id: details.id.toString(),
+        freelancer: details.freelancer,
+        client: details.client,
+        amount: details.amount,
+        description: details.description,
+        status: details.status,
+        createdAt: Number(details.createdAt),
+        deadline: Number(details.deadline),
+        deliverablesHash: details.deliverablesHash
+      };
+    } catch (error) {
+      console.error('Error getting milestone details:', error);
+      throw error;
+    }
+  }
+
+  async getUserMilestones(address) {
+    try {
+      const contract = await this.getContract();
+      const milestoneIds = await contract.getUserMilestones(address);
+      return milestoneIds.map(id => id.toString());
+    } catch (error) {
+      console.error('Error getting user milestones:', error);
+      throw error;
+    }
+  }
+
+  async releaseMilestone(milestoneId) {
+    try {
+      const contract = await this.getContract();
+      const tx = await contract.approveMilestone(milestoneId);
+      return tx;
+    } catch (error) {
+      console.error('Error releasing milestone:', error);
+      throw error;
+    }
+  }
+
+  async disputeMilestone(milestoneId, reason) {
+    try {
+      const contract = await this.getContract();
+      const tx = await contract.raiseMilestoneDispute(milestoneId, reason);
+      return tx;
+    } catch (error) {
+      console.error('Error disputing milestone:', error);
+      throw error;
+    }
+  }
+
+  async getAllMilestones() {
+    try {
+      const contract = await this.getContract();
+      const milestoneCount = await contract.milestoneCounter();
+      const milestones = [];
+
+      for (let i = 1; i <= milestoneCount; i++) {
+        try {
+          const milestone = await contract.getMilestoneDetails(i);
+          milestones.push({
+            id: milestone.id.toString(),
+            freelancer: milestone.freelancer,
+            client: milestone.client,
+            amount: ethers.formatEther(milestone.amount),
+            description: milestone.description,
+            status: this.getMilestoneStatus(milestone.status),
+            createdAt: Number(milestone.createdAt),
+            deadline: Number(milestone.deadline),
+            deliverablesHash: milestone.deliverablesHash
+          });
+        } catch (error) {
+          console.error(`Error fetching milestone ${i}:`, error);
+          continue;
+        }
+      }
+
+      return milestones;
+    } catch (error) {
+      console.error('Error getting all milestones:', error);
+      throw error;
+    }
+  }
+
+  getMilestoneStatus(statusCode) {
+    const statuses = {
+      0: 'pending',
+      1: 'in_progress',
+      2: 'submitted',
+      3: 'approved',
+      4: 'disputed',
+      5: 'rejected'
+    };
+    return statuses[statusCode] || 'unknown';
   }
 }
 

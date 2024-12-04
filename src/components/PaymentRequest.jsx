@@ -10,7 +10,6 @@ import { Button } from './ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from './ui/select'
 import { toast } from './ui/use-toast'
 import { contractInteractions } from '../utils/contractInteractions'
-import { BigInt } from 'ethers';
 
 // Utility function for robust input validation
 const validateInputs = (formData) => {
