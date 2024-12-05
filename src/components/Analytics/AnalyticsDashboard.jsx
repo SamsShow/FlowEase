@@ -6,6 +6,7 @@ import { contractInteractions } from '../../utils/contractInteractions';
 import { Loading } from '../ui/loading';
 import { toast } from '../ui/use-toast';
 import { ethers } from 'ethers';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../ui/chart';
 
 // Chart.js setup
 import {
@@ -118,9 +119,10 @@ export default function AnalyticsDashboard() {
     datasets: [{
       label: 'Monthly Earnings (ETH)',
       data: monthlyData,
-      borderColor: 'rgb(75, 192, 192)',
+      borderColor: 'hsl(var(--chart-1))',
+      backgroundColor: 'hsl(var(--chart-1) / 0.1)',
       tension: 0.1,
-      fill: false
+      fill: true
     }]
   });
 
@@ -129,9 +131,9 @@ export default function AnalyticsDashboard() {
     datasets: [{
       data: [stats.completed, stats.inProgress, stats.disputed],
       backgroundColor: [
-        'rgb(34, 197, 94)',
-        'rgb(234, 179, 8)',
-        'rgb(239, 68, 68)'
+        'hsl(var(--chart-2))',
+        'hsl(var(--chart-3))',
+        'hsl(var(--chart-4))'
       ]
     }]
   });
@@ -142,8 +144,8 @@ export default function AnalyticsDashboard() {
       label: 'Dispute Resolution',
       data: [stats.completed, stats.disputed],
       backgroundColor: [
-        'rgb(34, 197, 94)',
-        'rgb(239, 68, 68)'
+        'hsl(var(--chart-2))',
+        'hsl(var(--chart-4))'
       ]
     }]
   });
@@ -155,11 +157,11 @@ export default function AnalyticsDashboard() {
     datasets: [{
       data: Array.from(clientMap.values()),
       backgroundColor: [
-        'rgb(59, 130, 246)',
-        'rgb(16, 185, 129)',
-        'rgb(245, 158, 11)',
-        'rgb(239, 68, 68)',
-        'rgb(168, 85, 247)'
+        'hsl(var(--chart-1))',
+        'hsl(var(--chart-2))',
+        'hsl(var(--chart-3))',
+        'hsl(var(--chart-4))',
+        'hsl(var(--chart-5))'
       ]
     }]
   });
@@ -169,87 +171,220 @@ export default function AnalyticsDashboard() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <h2 className="text-2xl font-bold">Analytics Dashboard</h2>
+    <div className="p-6 space-y-6 bg-gray-900 text-gray-100 pt-20">
+      <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 text-transparent bg-clip-text">Analytics Dashboard</h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
+        <Card className="bg-gray-800 border-gray-700">
           <CardHeader>
-            <CardTitle>Earnings Overview</CardTitle>
+            <CardTitle className="text-gray-100">Earnings Overview</CardTitle>
           </CardHeader>
           <CardContent>
-            <Line
-              data={analytics.earnings}
-              options={{
-                responsive: true,
-                scales: {
-                  y: {
-                    beginAtZero: true
-                  }
-                }
+            <ChartContainer
+              config={{
+                earnings: {
+                  label: "Monthly Earnings (ETH)",
+                  color: "hsl(var(--chart-1))",
+                },
               }}
-            />
+              className="h-[300px]"
+            >
+              <Line
+                data={analytics.earnings}
+                options={{
+                  responsive: true,
+                  scales: {
+                    y: {
+                      beginAtZero: true,
+                      grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                      },
+                      ticks: {
+                        color: 'rgba(255, 255, 255, 0.7)',
+                      }
+                    },
+                    x: {
+                      grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                      },
+                      ticks: {
+                        color: 'rgba(255, 255, 255, 0.7)',
+                      }
+                    }
+                  },
+                  plugins: {
+                    legend: {
+                      labels: {
+                        color: 'rgba(255, 255, 255, 0.7)',
+                      }
+                    },
+                    tooltip: {
+                      enabled: false,
+                    },
+                  },
+                }}
+              />
+              <ChartTooltip content={<ChartTooltipContent />} />
+            </ChartContainer>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gray-800 border-gray-700">
           <CardHeader>
-            <CardTitle>Project Status Distribution</CardTitle>
+            <CardTitle className="text-gray-100">Project Status Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <Doughnut
-              data={analytics.projectStatus}
-              options={{
-                responsive: true,
-                plugins: {
-                  legend: {
-                    position: 'bottom'
-                  }
-                }
+            <ChartContainer
+              config={{
+                completed: {
+                  label: "Completed",
+                  color: "hsl(var(--chart-2))",
+                },
+                inProgress: {
+                  label: "In Progress",
+                  color: "hsl(var(--chart-3))",
+                },
+                disputed: {
+                  label: "Disputed",
+                  color: "hsl(var(--chart-4))",
+                },
               }}
-            />
+              className="h-[300px]"
+            >
+              <Doughnut
+                data={analytics.projectStatus}
+                options={{
+                  responsive: true,
+                  plugins: {
+                    legend: {
+                      position: 'bottom',
+                      labels: {
+                        color: 'rgba(255, 255, 255, 0.7)',
+                      }
+                    },
+                    tooltip: {
+                      enabled: false,
+                    },
+                  }
+                }}
+              />
+              <ChartTooltip content={<ChartTooltipContent />} />
+            </ChartContainer>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gray-800 border-gray-700">
           <CardHeader>
-            <CardTitle>Dispute Resolution Rate</CardTitle>
+            <CardTitle className="text-gray-100">Dispute Resolution Rate</CardTitle>
           </CardHeader>
           <CardContent>
-            <Bar
-              data={analytics.disputeResolution}
-              options={{
-                responsive: true,
-                scales: {
-                  y: {
-                    beginAtZero: true,
-                    max: 100
-                  }
-                }
+            <ChartContainer
+              config={{
+                resolved: {
+                  label: "Resolved",
+                  color: "hsl(var(--chart-2))",
+                },
+                pending: {
+                  label: "Pending",
+                  color: "hsl(var(--chart-4))",
+                },
               }}
-            />
+              className="h-[300px]"
+            >
+              <Bar
+                data={analytics.disputeResolution}
+                options={{
+                  responsive: true,
+                  scales: {
+                    y: {
+                      beginAtZero: true,
+                      max: 100,
+                      grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                      },
+                      ticks: {
+                        color: 'rgba(255, 255, 255, 0.7)',
+                      }
+                    },
+                    x: {
+                      grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                      },
+                      ticks: {
+                        color: 'rgba(255, 255, 255, 0.7)',
+                      }
+                    }
+                  },
+                  plugins: {
+                    legend: {
+                      labels: {
+                        color: 'rgba(255, 255, 255, 0.7)',
+                      }
+                    },
+                    tooltip: {
+                      enabled: false,
+                    },
+                  }
+                }}
+              />
+              <ChartTooltip content={<ChartTooltipContent />} />
+            </ChartContainer>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gray-800 border-gray-700">
           <CardHeader>
-            <CardTitle>Client Distribution</CardTitle>
+            <CardTitle className="text-gray-100">Client Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <Doughnut
-              data={analytics.clientDistribution}
-              options={{
-                responsive: true,
-                plugins: {
-                  legend: {
-                    position: 'bottom'
-                  }
-                }
+            <ChartContainer
+              config={{
+                client1: {
+                  label: "Client 1",
+                  color: "hsl(var(--chart-1))",
+                },
+                client2: {
+                  label: "Client 2",
+                  color: "hsl(var(--chart-2))",
+                },
+                client3: {
+                  label: "Client 3",
+                  color: "hsl(var(--chart-3))",
+                },
+                client4: {
+                  label: "Client 4",
+                  color: "hsl(var(--chart-4))",
+                },
+                client5: {
+                  label: "Client 5",
+                  color: "hsl(var(--chart-5))",
+                },
               }}
-            />
+              className="h-[300px]"
+            >
+              <Doughnut
+                data={analytics.clientDistribution}
+                options={{
+                  responsive: true,
+                  plugins: {
+                    legend: {
+                      position: 'bottom',
+                      labels: {
+                        color: 'rgba(255, 255, 255, 0.7)',
+                      }
+                    },
+                    tooltip: {
+                      enabled: false,
+                    },
+                  }
+                }}
+              />
+              <ChartTooltip content={<ChartTooltipContent />} />
+            </ChartContainer>
           </CardContent>
         </Card>
       </div>
     </div>
   );
-} 
+}
+

@@ -38,7 +38,7 @@ function App() {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <div className="min-h-screen bg-gray-50">
+          <div className="">
             <Navbar />
             <Routes>
               {/* Public Routes */}
