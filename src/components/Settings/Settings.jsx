@@ -42,7 +42,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 pt-20">
       <h2 className="text-2xl font-bold">Settings</h2>
 
       <Card>

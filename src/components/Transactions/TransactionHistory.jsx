@@ -116,7 +116,7 @@ export const TransactionHistory = () => {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 pt-20">
       <h2 className="text-2xl font-bold">Transaction History</h2>
 
       <SearchFilter onSearch={handleSearch} onFilter={handleFilter} />
