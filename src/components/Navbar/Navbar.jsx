@@ -41,6 +41,7 @@ export default function Navbar() {
     { path: '/dashboard', label: 'Dashboard' },
     { path: '/explore', label: 'Explore' },
     { path: '/client/projects', label: 'My Projects' },
+    { path: '/milestone-submission', label: 'Milestones' },
     { path: '/transactions', label: 'Transactions' },
     { path: '/analytics', label: 'Analytics' },
     { path: '/escrow', label: 'Escrow' },

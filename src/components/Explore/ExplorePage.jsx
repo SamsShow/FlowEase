@@ -24,7 +24,7 @@ import { toast } from "../ui/use-toast";
 import { SearchFilter } from "../Search/SearchFilter";
 import { Label } from "../ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-import { Plus, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Plus, Clock, CheckCircle, AlertTriangle, Eye } from "lucide-react";
 
 const ExplorePage = () => {
   const { address } = useAccount();
@@ -47,6 +47,11 @@ const ExplorePage = () => {
     description: "",
     deadline: "",
   });
+  const [showProjectDetailsModal, setShowProjectDetailsModal] = useState(false);
+  const [projectMilestones, setProjectMilestones] = useState([]);
+  const [currentProject, setCurrentProject] = useState(null);
+  const [showMilestoneModal, setShowMilestoneModal] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
 
   useEffect(() => {
     fetchData();
@@ -57,7 +62,7 @@ const ExplorePage = () => {
       setLoading(true);
       const [allProjects, allMilestones] = await Promise.all([
         contractInteractions.getAllProjects(),
-        contractInteractions.getAllMilestones()
+        contractInteractions.getAllMilestones(),
       ]);
 
       // Process projects
@@ -213,59 +218,41 @@ const ExplorePage = () => {
     e.preventDefault();
     try {
       setLoading(true);
-      
+
       // Validate inputs
-      if (!newMilestone.freelancer || !newMilestone.amount || 
-          !newMilestone.description || !newMilestone.deadline) {
-        throw new Error("Please fill in all required fields");
+      if (!newMilestone.freelancer || !newMilestone.amount || !newMilestone.description || !newMilestone.deadline) {
+        throw new Error("Please fill in all milestone fields");
       }
 
-      // Validate amount is positive
-      const amount = ethers.parseEther(newMilestone.amount);
-      if (amount <= 0) {
-        throw new Error("Amount must be greater than 0");
-      }
-
-      // Validate deadline is in the future
-      const deadlineDate = new Date(newMilestone.deadline);
-      if (deadlineDate <= new Date()) {
-        throw new Error("Deadline must be in the future");
-      }
-
-      const deadlineTimestamp = Math.floor(deadlineDate.getTime() / 1000);
-
-      console.log('Creating milestone with params:', {
-        freelancer: newMilestone.freelancer,
-        amount: amount.toString(),
-        deadline: deadlineTimestamp,
-        description: newMilestone.description
-      });
-
-      // Create milestone with exact ETH value
-      const tx = await contractInteractions.createMilestone(
+      // Create milestone
+      await contractInteractions.createMilestone(
         newMilestone.freelancer,
-        amount,
+        ethers.parseEther(newMilestone.amount),
         newMilestone.description,
-        deadlineTimestamp
+        Math.floor(new Date(newMilestone.deadline).getTime() / 1000)
       );
-
-      await tx.wait();
 
       toast({
         title: "Success",
-        description: "Milestone created successfully!"
+        description: "Milestone created successfully"
       });
 
-      setShowCreateModal(false);
-      await fetchData();
-      
-      // Reset form
+      // Add to project milestones
+      setProjectMilestones(prev => [...prev, {
+        ...newMilestone,
+        id: Date.now(), // Temporary ID for demo
+        projectId: selectedProject.id,
+        status: 'pending'
+      }]);
+
+      // Reset form but keep modal open for adding more milestones
       setNewMilestone({
-        freelancer: '',
-        amount: '',
-        description: '',
-        deadline: ''
+        freelancer: "",
+        amount: "",
+        description: "",
+        deadline: ""
       });
+
     } catch (error) {
       console.error("Error creating milestone:", error);
       toast({
@@ -276,6 +263,14 @@ const ExplorePage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleViewProject = async (project) => {
+    setCurrentProject(project);
+    // Fetch milestones for this project
+    const projectMilestones = milestones.filter(m => m.projectId === project.id);
+    setProjectMilestones(projectMilestones);
+    setShowProjectDetailsModal(true);
   };
 
   if (loading) {
@@ -306,7 +301,37 @@ const ExplorePage = () => {
         <TabsContent value="projects">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProjects.map((project) => (
-              <ProjectCard key={project.id} project={project} />
+              <Card key={project.id} className="flex flex-col">
+                <CardHeader>
+                  <CardTitle>{project.title}</CardTitle>
+                  <CardDescription>Budget: {project.budget} ETH</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm mb-4">{project.description}</p>
+                  <div className="flex justify-between items-center">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleViewProject(project)}
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      View Details
+                    </Button>
+                    {project.client === address && (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setSelectedProject(project);
+                          setShowMilestoneModal(true);
+                        }}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Milestone
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         </TabsContent>
@@ -324,12 +349,17 @@ const ExplorePage = () => {
                         {milestone.freelancer.slice(-4)}
                       </CardDescription>
                     </div>
-                    <Badge variant={
-                      milestone.status === 'approved' ? 'default' :
-                      milestone.status === 'in_progress' ? 'secondary' :
-                      milestone.status === 'disputed' ? 'destructive' :
-                      'outline'
-                    }>
+                    <Badge
+                      variant={
+                        milestone.status === "approved"
+                          ? "default"
+                          : milestone.status === "in_progress"
+                          ? "secondary"
+                          : milestone.status === "disputed"
+                          ? "destructive"
+                          : "outline"
+                      }
+                    >
                       {milestone.status}
                     </Badge>
                   </div>
@@ -339,11 +369,17 @@ const ExplorePage = () => {
                     <p className="text-gray-600">{milestone.description}</p>
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-500">Amount:</span>
-                      <span className="font-medium">{milestone.amount} ETH</span>
+                      <span className="font-medium">
+                        {milestone.amount} ETH
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-500">Deadline:</span>
-                      <span>{new Date(milestone.deadline * 1000).toLocaleDateString()}</span>
+                      <span>
+                        {new Date(
+                          milestone.deadline * 1000
+                        ).toLocaleDateString()}
+                      </span>
                     </div>
                   </div>
                 </CardContent>
@@ -353,12 +389,90 @@ const ExplorePage = () => {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+      <Dialog open={showProjectDetailsModal} onOpenChange={setShowProjectDetailsModal}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{currentProject?.title}</DialogTitle>
+            <DialogDescription>
+              Project Details and Milestones
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <h4 className="font-semibold">Budget</h4>
+                <p>{currentProject?.budget} ETH</p>
+              </div>
+              <div>
+                <h4 className="font-semibold">Deadline</h4>
+                <p>{new Date(currentProject?.deadline).toLocaleDateString()}</p>
+              </div>
+              <div className="col-span-2">
+                <h4 className="font-semibold">Description</h4>
+                <p>{currentProject?.description}</p>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="font-semibold mb-2">Milestones</h4>
+              {projectMilestones.length > 0 ? (
+                <div className="space-y-2">
+                  {projectMilestones.map((milestone, index) => (
+                    <Card key={milestone.id}>
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h5 className="font-semibold">Milestone {index + 1}</h5>
+                            <p className="text-sm">{milestone.description}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold">{milestone.amount} ETH</p>
+                            <p className="text-sm text-muted-foreground">
+                              Due: {new Date(milestone.deadline).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">
+                            Freelancer: {milestone.freelancer.slice(0, 6)}...{milestone.freelancer.slice(-4)}
+                          </span>
+                          <Badge>{milestone.status}</Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground">No milestones created yet.</p>
+              )}
+            </div>
+
+            {currentProject?.client === address && (
+              <div className="flex justify-end">
+                <Button
+                  onClick={() => {
+                    setSelectedProject(currentProject);
+                    setShowProjectDetailsModal(false);
+                    setShowMilestoneModal(true);
+                  }}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add New Milestone
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showMilestoneModal} onOpenChange={setShowMilestoneModal}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Milestone</DialogTitle>
             <DialogDescription>
-              Create a new milestone for a project
+              Adding milestone for project: {selectedProject?.title}
+              <br />
+              Current milestones: {projectMilestones.length}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateMilestone} className="space-y-4">
@@ -423,15 +537,19 @@ const ExplorePage = () => {
               />
             </div>
             <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowCreateModal(false)}
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => {
+                  setShowMilestoneModal(false);
+                  setSelectedProject(null);
+                  setProjectMilestones([]);
+                }}
               >
-                Cancel
+                Done Adding
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? "Creating..." : "Create Milestone"}
+                {loading ? 'Creating...' : 'Add Another Milestone'}
               </Button>
             </div>
           </form>
@@ -440,55 +558,5 @@ const ExplorePage = () => {
     </div>
   );
 };
-
-// Helper component for project cards
-const ProjectCard = ({ project }) => (
-  <Card className="flex flex-col">
-    <CardHeader>
-      <div className="flex justify-between items-start">
-        <div>
-          <CardTitle>{project.title}</CardTitle>
-          <CardDescription>
-            Posted by: {project.client.slice(0, 6)}...
-            {project.client.slice(-4)}
-          </CardDescription>
-        </div>
-        <Badge
-          variant={
-            project.status === "open"
-              ? "default"
-              : project.status === "in_progress"
-              ? "secondary"
-              : "outline"
-          }
-        >
-          {project.status}
-        </Badge>
-      </div>
-    </CardHeader>
-    <CardContent className="flex-1 flex flex-col">
-      <p className="text-gray-600 mb-4 flex-1">{project.description}</p>
-      <div className="space-y-2">
-        <div className="flex justify-between">
-          <span className="text-sm text-gray-500">Budget:</span>
-          <span className="font-medium">{project.budget} ETH</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-sm text-gray-500">Deadline:</span>
-          <span>
-            {new Date(project.deadline * 1000).toLocaleDateString()}
-          </span>
-        </div>
-        <Button
-          className="w-full mt-4"
-          variant="outline"
-          onClick={() => {}}
-        >
-          View Details
-        </Button>
-      </div>
-    </CardContent>
-  </Card>
-);
 
 export default ExplorePage;

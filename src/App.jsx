@@ -20,6 +20,7 @@ import ChatSystem from "./components/Chat/ChatSystem";
 import Settings from './components/Settings/Settings';
 import ExplorePage from './components/Explore/ExplorePage';
 import ClientProjectsPage from './components/Client/ClientProjectsPage';
+import MilestoneSubmission from "./components/MilestoneSubmission";
 
 // Set up wagmi config
 const config = createConfig({
@@ -52,6 +53,7 @@ function App() {
               <Route path="/payment-request" element={<PaymentRequest />} />
               <Route path="/milestones/:projectId" element={<Milestones />} />
               <Route path="/escrow" element={<Escrow />} />
+              <Route path="/milestone-submission" element={<MilestoneSubmission />} />
               <Route path="/transactions" element={<TransactionHistory />} />
               <Route path="/analytics" element={<AnalyticsDashboard />} />
               <Route path="/chat/:projectId" element={<ChatSystem />} />

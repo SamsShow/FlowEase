@@ -267,23 +267,43 @@ export class ContractInteractions {
     }
   }
 
+  getMilestoneStatus(statusCode) {
+    const statuses = {
+      0: 'pending',
+      1: 'in_progress',
+      2: 'submitted',
+      3: 'approved',
+      4: 'disputed',
+      5: 'rejected'
+    };
+    return statuses[statusCode] || 'unknown';
+  }
+
   async getMilestoneDetails(milestoneId) {
     try {
       const contract = await this.getContract();
       const details = await contract.getMilestoneDetails(milestoneId);
-      return {
-        id: details.id.toString(),
+      
+      console.log('Raw milestone details:', details);
+      console.log('Status code:', Number(details.status));
+      
+      const milestone = {
+        id: Number(details.id),
         freelancer: details.freelancer,
         client: details.client,
         amount: details.amount,
         description: details.description,
-        status: details.status,
+        status: this.getMilestoneStatus(Number(details.status)),
+        statusCode: Number(details.status),
         createdAt: Number(details.createdAt),
         deadline: Number(details.deadline),
         deliverablesHash: details.deliverablesHash
       };
+
+      console.log('Processed milestone:', milestone);
+      return milestone;
     } catch (error) {
-      console.error('Error getting milestone details:', error);
+      console.error("Error getting milestone details:", error);
       throw error;
     }
   }
@@ -354,16 +374,61 @@ export class ContractInteractions {
     }
   }
 
-  getMilestoneStatus(statusCode) {
-    const statuses = {
-      0: 'pending',
-      1: 'in_progress',
-      2: 'submitted',
-      3: 'approved',
-      4: 'disputed',
-      5: 'rejected'
-    };
-    return statuses[statusCode] || 'unknown';
+  async submitMilestone(milestoneId, deliverablesHash) {
+    try {
+      const contract = await this.getContract();
+      
+      // Get current milestone status
+      const details = await contract.getMilestoneDetails(milestoneId);
+      const statusCode = Number(details.status);
+      
+      // Check if status is valid for submission (pending = 0 or in_progress = 1)
+      if (statusCode !== 0 && statusCode !== 1) {
+        throw new Error(`Cannot submit milestone in ${this.getMilestoneStatus(statusCode)} status`);
+      }
+
+      const tx = await contract.submitMilestone(milestoneId, deliverablesHash);
+      await tx.wait();
+      return tx;
+    } catch (error) {
+      console.error("Error submitting milestone:", error);
+      throw error;
+    }
+  }
+
+  async approveMilestone(milestoneId) {
+    try {
+      const contract = await this.getContract();
+      const tx = await contract.approveMilestone(milestoneId);
+      await tx.wait();
+      return tx;
+    } catch (error) {
+      console.error("Error approving milestone:", error);
+      throw error;
+    }
+  }
+
+  async addReview(reviewedAddress, rating, comment, milestoneId) {
+    try {
+      const contract = await this.getContract();
+      const tx = await contract.addReview(reviewedAddress, rating, comment, milestoneId);
+      await tx.wait();
+      return tx;
+    } catch (error) {
+      console.error("Error adding review:", error);
+      throw error;
+    }
+  }
+
+  async getUserMilestones(address) {
+    try {
+      const contract = await this.getContract();
+      const milestones = await contract.getUserMilestones(address);
+      return milestones.map(id => Number(id));
+    } catch (error) {
+      console.error("Error getting user milestones:", error);
+      throw error;
+    }
   }
 }
 
