@@ -111,42 +111,38 @@ export class ContractInteractions {
 
   async createProject(title, description, budget, deadline, skills) {
     try {
-      const contract = await this.getContract()
-      const provider = await this.getProvider()
+      const contract = await this.getContract();
 
-      // Ensure budget is a valid number before parsing
-      const parsedBudget = ethers.parseEther(budget.toString())
+      // Convert budget from ETH to Wei
+      const budgetInWei = ethers.parseEther(budget.toString());
       
-      // Ensure deadline is a number
-      const deadlineTimestamp = BigInt(Math.floor(deadline))
+      // Ensure deadline is a BigInt
+      const deadlineTimestamp = BigInt(deadline);
 
       // Ensure skills is an array
-      const skillsArray = Array.isArray(skills) ? skills : []
+      const skillsArray = Array.isArray(skills) ? skills : [];
 
-      // Estimate gas first
-      const gasEstimate = await contract.createProject.estimateGas(
+      console.log('Creating project with:', {
         title,
         description,
-        parsedBudget,
+        budgetInWei: budgetInWei.toString(),
+        deadline: deadlineTimestamp.toString(),
+        skills: skillsArray
+      });
+
+      // Send the transaction
+      const tx = await contract.createProject(
+        title,
+        description,
+        budgetInWei,
         deadlineTimestamp,
         skillsArray
-      )
+      );
 
-      // Add 20% buffer to gas estimate
-      const gasLimit = (BigInt(gasEstimate) * BigInt(120)) / BigInt(100)
-
-      // Send the transaction and return the transaction object
-      return await contract.createProject(
-        title,
-        description,
-        parsedBudget,
-        deadlineTimestamp,
-        skillsArray,
-        { gasLimit }
-      )
+      return tx;
     } catch (error) {
-      console.error("Error creating project:", error)
-      throw error
+      console.error("Error creating project:", error);
+      throw error;
     }
   }
 
@@ -408,6 +404,18 @@ export class ContractInteractions {
     }
   }
 
+  async startMilestone(milestoneId) {
+    try {
+      const contract = await this.getContract();
+      const tx = await contract.startMilestone(milestoneId);
+      await tx.wait();
+      return tx;
+    } catch (error) {
+      console.error("Error starting milestone:", error);
+      throw error;
+    }
+  }
+
   async addReview(reviewedAddress, rating, comment, milestoneId) {
     try {
       const contract = await this.getContract();
@@ -427,6 +435,82 @@ export class ContractInteractions {
       return milestones.map(id => Number(id));
     } catch (error) {
       console.error("Error getting user milestones:", error);
+      throw error;
+    }
+  }
+
+  async getMilestoneTransactions(address) {
+    try {
+      const contract = await this.getContract();
+      const provider = await this.getProvider();
+
+      // Get all milestone events related to the address
+      const filter = {
+        fromBlock: 0,
+        toBlock: 'latest',
+        address: this.contractAddress,
+      };
+
+      // Get milestone creation events
+      const creationEvents = await provider.getLogs({
+        ...filter,
+        topics: [
+          ethers.id("MilestoneCreated(uint256,address,address,uint256)"),
+          null,
+          ethers.zeroPadValue(address, 32)
+        ]
+      });
+
+      // Get milestone status change events
+      const statusEvents = await provider.getLogs({
+        ...filter,
+        topics: [
+          ethers.id("MilestoneStatusChanged(uint256,uint8)")
+        ]
+      });
+
+      // Process and combine the events
+      const transactions = [];
+      
+      for (const event of creationEvents) {
+        const parsedEvent = contract.interface.parseLog({
+          topics: event.topics,
+          data: event.data
+        });
+
+        transactions.push({
+          id: event.transactionHash,
+          type: 'Milestone Created',
+          amount: ethers.formatEther(parsedEvent.args.amount),
+          timestamp: (await provider.getBlock(event.blockNumber)).timestamp,
+          hash: event.transactionHash
+        });
+      }
+
+      for (const event of statusEvents) {
+        const parsedEvent = contract.interface.parseLog({
+          topics: event.topics,
+          data: event.data
+        });
+
+        if (parsedEvent.args.newStatus.toString() === '3') { // APPROVED status
+          const milestone = await contract.getMilestoneDetails(parsedEvent.args.milestoneId);
+          if (milestone.freelancer === address || milestone.client === address) {
+            transactions.push({
+              id: event.transactionHash,
+              type: milestone.freelancer === address ? 'Payment Received' : 'Payment Sent',
+              amount: ethers.formatEther(milestone.amount),
+              timestamp: (await provider.getBlock(event.blockNumber)).timestamp,
+              hash: event.transactionHash
+            });
+          }
+        }
+      }
+
+      // Sort by timestamp, most recent first
+      return transactions.sort((a, b) => b.timestamp - a.timestamp);
+    } catch (error) {
+      console.error("Error getting milestone transactions:", error);
       throw error;
     }
   }

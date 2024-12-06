@@ -1,5 +1,113 @@
 [
 	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "_reviewed",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_rating",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "_comment",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_milestoneId",
+				"type": "uint256"
+			}
+		],
+		"name": "addReview",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_milestoneId",
+				"type": "uint256"
+			}
+		],
+		"name": "approveMilestone",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "_freelancer",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_amount",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "_description",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_deadline",
+				"type": "uint256"
+			}
+		],
+		"name": "createMilestone",
+		"outputs": [],
+		"stateMutability": "payable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_title",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_description",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_budget",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_deadline",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string[]",
+				"name": "_requiredSkills",
+				"type": "string[]"
+			}
+		],
+		"name": "createProject",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
 		"inputs": [],
 		"stateMutability": "nonpayable",
 		"type": "constructor"
@@ -260,6 +368,44 @@
 		"type": "event"
 	},
 	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_milestoneId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "_reason",
+				"type": "string"
+			}
+		],
+		"name": "raiseMilestoneDispute",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "renounceOwnership",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_disputeId",
+				"type": "uint256"
+			}
+		],
+		"name": "resolveDispute",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
 		"anonymous": false,
 		"inputs": [
 			{
@@ -291,6 +437,68 @@
 		"type": "event"
 	},
 	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_milestoneId",
+				"type": "uint256"
+			}
+		],
+		"name": "startMilestone",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_milestoneId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "_deliverablesHash",
+				"type": "string"
+			}
+		],
+		"name": "submitMilestone",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "newOwner",
+				"type": "address"
+			}
+		],
+		"name": "transferOwnership",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_ipfsHash",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_profileImage",
+				"type": "string"
+			}
+		],
+		"name": "updateProfile",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
 		"anonymous": false,
 		"inputs": [
 			{
@@ -311,26 +519,11 @@
 		"inputs": [
 			{
 				"internalType": "address",
-				"name": "_reviewed",
+				"name": "_user",
 				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_rating",
-				"type": "uint256"
-			},
-			{
-				"internalType": "string",
-				"name": "_comment",
-				"type": "string"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_milestoneId",
-				"type": "uint256"
 			}
 		],
-		"name": "addReview",
+		"name": "verifyUser",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -339,11 +532,16 @@
 		"inputs": [
 			{
 				"internalType": "uint256",
-				"name": "_milestoneId",
+				"name": "_disputeId",
 				"type": "uint256"
+			},
+			{
+				"internalType": "bool",
+				"name": "_voteForFreelancer",
+				"type": "bool"
 			}
 		],
-		"name": "approveMilestone",
+		"name": "voteOnDispute",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -352,68 +550,23 @@
 		"inputs": [
 			{
 				"internalType": "address",
-				"name": "_freelancer",
+				"name": "_token",
 				"type": "address"
 			},
 			{
 				"internalType": "uint256",
-				"name": "_amount",
-				"type": "uint256"
-			},
-			{
-				"internalType": "string",
-				"name": "_description",
-				"type": "string"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_deadline",
+				"name": "_milestoneId",
 				"type": "uint256"
 			}
 		],
-		"name": "createMilestone",
+		"name": "withdrawStaleFunds",
 		"outputs": [],
-		"stateMutability": "payable",
+		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
-		"inputs": [
-			{
-				"internalType": "string",
-				"name": "_title",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_description",
-				"type": "string"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_budget",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_deadline",
-				"type": "uint256"
-			},
-			{
-				"internalType": "string[]",
-				"name": "_requiredSkills",
-				"type": "string[]"
-			}
-		],
-		"name": "createProject",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "nonpayable",
-		"type": "function"
+		"stateMutability": "payable",
+		"type": "receive"
 	},
 	{
 		"inputs": [],
@@ -883,93 +1036,6 @@
 	{
 		"inputs": [
 			{
-				"internalType": "uint256",
-				"name": "_milestoneId",
-				"type": "uint256"
-			},
-			{
-				"internalType": "string",
-				"name": "_reason",
-				"type": "string"
-			}
-		],
-		"name": "raiseMilestoneDispute",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "renounceOwnership",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_disputeId",
-				"type": "uint256"
-			}
-		],
-		"name": "resolveDispute",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_milestoneId",
-				"type": "uint256"
-			},
-			{
-				"internalType": "string",
-				"name": "_deliverablesHash",
-				"type": "string"
-			}
-		],
-		"name": "submitMilestone",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "newOwner",
-				"type": "address"
-			}
-		],
-		"name": "transferOwnership",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "string",
-				"name": "_ipfsHash",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_profileImage",
-				"type": "string"
-			}
-		],
-		"name": "updateProfile",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
 				"internalType": "address",
 				"name": "",
 				"type": "address"
@@ -1053,58 +1119,5 @@
 		],
 		"stateMutability": "view",
 		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "_user",
-				"type": "address"
-			}
-		],
-		"name": "verifyUser",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_disputeId",
-				"type": "uint256"
-			},
-			{
-				"internalType": "bool",
-				"name": "_voteForFreelancer",
-				"type": "bool"
-			}
-		],
-		"name": "voteOnDispute",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "_token",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_milestoneId",
-				"type": "uint256"
-			}
-		],
-		"name": "withdrawStaleFunds",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"stateMutability": "payable",
-		"type": "receive"
 	}
 ]

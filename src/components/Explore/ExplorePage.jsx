@@ -130,45 +130,44 @@ const ExplorePage = () => {
         return;
       }
 
-      try {
-        // Create the project
-        await contractInteractions.createProject(
-          newProject.title,
-          newProject.description,
-          budgetNum.toString(),
-          deadlineDate,
-          [] // Empty skills array for now
-        );
+      // Convert deadline to Unix timestamp (seconds)
+      const deadlineTimestamp = Math.floor(deadlineDate.getTime() / 1000);
 
-        toast({
-          title: "Success",
-          description: "Project created successfully!",
-        });
+      // Create the project
+      const tx = await contractInteractions.createProject(
+        newProject.title,
+        newProject.description,
+        newProject.budget, // Contract will handle the conversion
+        deadlineTimestamp,
+        [] // Empty skills array for now
+      );
 
-        setShowCreateModal(false);
-        await fetchData();
+      // Wait for transaction to be mined
+      await tx.wait();
 
-        // Reset form
-        setNewProject({
-          title: "",
-          description: "",
-          budget: "",
-          deadline: "",
-          milestones: [{ description: "", amount: "" }],
-        });
-      } catch (txError) {
-        console.error("Transaction error:", txError);
-        throw new Error(
-          txError.message ||
-            "Transaction failed. Please check your wallet has sufficient funds."
-        );
-      }
+      toast({
+        title: "Success",
+        description: "Project created successfully!",
+      });
+
+      // Reset form and close modal
+      setNewProject({
+        title: "",
+        description: "",
+        budget: "",
+        deadline: "",
+        milestones: [{ description: "", amount: "" }],
+      });
+      setShowCreateModal(false);
+      
+      // Refresh the projects list
+      await fetchData();
+
     } catch (error) {
       console.error("Error creating project:", error);
       toast({
         title: "Error",
-        description:
-          error.message || "Failed to create project. Please try again.",
+        description: error.message || "Failed to create project. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -550,6 +549,104 @@ const ExplorePage = () => {
               </Button>
               <Button type="submit" disabled={loading}>
                 {loading ? 'Creating...' : 'Add Another Milestone'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Project</DialogTitle>
+            <DialogDescription>
+              Fill in the project details below
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateProject} className="space-y-4">
+            <div>
+              <Label htmlFor="title">Project Title</Label>
+              <Input
+                id="title"
+                value={newProject.title}
+                onChange={(e) =>
+                  setNewProject((prev) => ({
+                    ...prev,
+                    title: e.target.value,
+                  }))
+                }
+                placeholder="Enter project title"
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={newProject.description}
+                onChange={(e) =>
+                  setNewProject((prev) => ({
+                    ...prev,
+                    description: e.target.value,
+                  }))
+                }
+                placeholder="Describe your project"
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="budget">Budget (ETH)</Label>
+              <Input
+                id="budget"
+                type="number"
+                step="0.000000000000000001"
+                min="0"
+                value={newProject.budget}
+                onChange={(e) =>
+                  setNewProject((prev) => ({
+                    ...prev,
+                    budget: e.target.value,
+                  }))
+                }
+                placeholder="0.0"
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="deadline">Deadline</Label>
+              <Input
+                id="deadline"
+                type="date"
+                value={newProject.deadline}
+                onChange={(e) =>
+                  setNewProject((prev) => ({
+                    ...prev,
+                    deadline: e.target.value,
+                  }))
+                }
+                min={new Date().toISOString().split('T')[0]}
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setNewProject({
+                    title: "",
+                    description: "",
+                    budget: "",
+                    deadline: "",
+                    milestones: [{ description: "", amount: "" }],
+                  });
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? "Creating..." : "Create Project"}
               </Button>
             </div>
           </form>

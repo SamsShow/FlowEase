@@ -233,6 +233,16 @@ contract FlowEasePaymentSystem is Ownable, ReentrancyGuard {
         emit MilestoneStatusChanged(_milestoneId, MilestoneStatus.APPROVED);
     }
 
+    // Start Milestone - Changes status from PENDING to IN_PROGRESS
+    function startMilestone(uint256 _milestoneId) external {
+        Milestone storage milestone = milestones[_milestoneId];
+        require(milestone.client == msg.sender, "Not authorized");
+        require(milestone.status == MilestoneStatus.PENDING, "Invalid status");
+        
+        milestone.status = MilestoneStatus.IN_PROGRESS;
+        emit MilestoneStatusChanged(_milestoneId, MilestoneStatus.IN_PROGRESS);
+    }
+
     // Raise Dispute
     function raiseMilestoneDispute(
         uint256 _milestoneId, 
