@@ -1,10 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 import animate from "tailwindcss-animate";
-const defaultTheme = require("tailwindcss/defaultTheme");
 const svgToDataUri = require("mini-svg-data-uri");
-const {
-  default: flattenColorPalette,
-} = require("tailwindcss/lib/util/flattenColorPalette");
+import svgToDataUri from "mini-svg-data-uri";
+import flattenColorPalette from "tailwindcss/lib/util/flattenColorPalette.js";
 
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
