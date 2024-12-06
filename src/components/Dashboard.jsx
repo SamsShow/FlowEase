@@ -4,81 +4,117 @@ import { useAccount } from 'wagmi'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
-import { Plus, DollarSign, CheckCircle, Clock, AlertTriangle } from 'lucide-react'
+import { Plus, DollarSign, CheckCircle, Clock, AlertTriangle, FileText } from 'lucide-react'
 import { ScrollArea } from './ui/scroll-area'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './ui/table'
 import { contractInteractions } from '../utils/contractInteractions'
+import { requestNetworkHelper } from '../utils/requestNetworkHelper'
 import { Loading } from './ui/loading'
 import { toast } from './ui/use-toast'
 import { ethers } from 'ethers'
 
 const statusColors = {
   pending: 'bg-yellow-500/30 text-yellow-200',
-  completed: 'bg-green-500/30 text-green-200',
-  disputed: 'bg-red-500/30 text-red-200'
+  in_progress: 'bg-blue-500/30 text-blue-200',
+  submitted: 'bg-purple-500/30 text-purple-200',
+  approved: 'bg-green-500/30 text-green-200',
+  disputed: 'bg-red-500/30 text-red-200',
+  rejected: 'bg-gray-500/30 text-gray-200'
 }
 
-const StatusBadge = ({ status }) => (
-  <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[status]}`}>
-    {status.charAt(0).toUpperCase() + status.slice(1)}
-  </span>
-)
+const StatusBadge = ({ status }) => {
+  const displayStatus = status.toLowerCase().replace(/_/g, ' ');
+  return (
+    <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[status] || statusColors.pending}`}>
+      {displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1)}
+    </span>
+  );
+}
 
 export default function Dashboard() {
   const navigate = useNavigate()
   const { address, isConnected } = useAccount()
   const [loading, setLoading] = useState(true)
   const [projects, setProjects] = useState([])
+  const [milestones, setMilestones] = useState([])
   const [stats, setStats] = useState({
     totalEarnings: '0',
     activeProjects: 0,
     completedProjects: 0,
     disputes: 0
   })
+  const [invoices, setInvoices] = useState([]);
 
   useEffect(() => {
-    if (isConnected) {
-      fetchDashboardData()
+    if (isConnected && address) {
+      fetchDashboardData();
+      fetchInvoices();
+    } else {
+      setLoading(false);
     }
-  }, [isConnected, address])
+  }, [address, isConnected]);
+
+  const getMilestoneStatus = (statusCode) => {
+    const statusMap = {
+      0: 'pending',
+      1: 'in_progress',
+      2: 'submitted',
+      3: 'approved',
+      4: 'disputed',
+      5: 'rejected'
+    };
+    return statusMap[statusCode] || 'pending';
+  };
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const contract = await contractInteractions.getContract();
-  
-      const userProfile = await contract.getUserProfile(address);
-  
-      const milestoneCount = await contract.milestoneCounter();
-      const formattedProjects = [];
-  
-      for (let i = 0; i < milestoneCount; i++) {
-        const milestone = await contract.milestones(i);
-        
-        if (milestone.freelancer === address || milestone.client === address) {
-          formattedProjects.push({
-            id: milestone.id.toString(),
-            title: milestone.description,
-            client: milestone.client,
-            amount: ethers.formatEther(milestone.amount),
-            deadline: new Date(Number(milestone.deadline) * 1000).toLocaleDateString(),
-            status: getMilestoneStatus(Number(milestone.status)),
-            milestones: 1,
-            completedMilestones: Number(milestone.status) === 3 ? 1 : 0
-          });
-        }
-      }
-  
-      const statsToSet = {
-        totalEarnings: ethers.formatEther(userProfile.totalEarnings || '0'),
-        activeProjects: formattedProjects.filter(p => p.status === 'in_progress').length,
-        completedProjects: Number(userProfile.completedProjects || 0),
-        disputes: formattedProjects.filter(p => p.status === 'disputed').length
+      console.log('Fetching dashboard data...');
+      
+      // Fetch projects and milestones in parallel
+      const [allProjects, allMilestones] = await Promise.all([
+        contractInteractions.getAllProjects(),
+        contractInteractions.getAllMilestones()
+      ]);
+
+      console.log('Fetched data:', { allProjects, allMilestones });
+
+      // Filter and format projects
+      const userProjects = allProjects.filter(
+        project => project.client === address
+      ).map(project => ({
+        ...project,
+        milestones: allMilestones.filter(m => m.projectId === project.id).length,
+        completedMilestones: allMilestones.filter(
+          m => m.projectId === project.id && m.status === 'approved'
+        ).length
+      }));
+
+      // Format milestones with proper status
+      const userMilestones = allMilestones
+        .filter(m => m.freelancer === address || m.client === address)
+        .map(m => ({
+          ...m,
+          status: getMilestoneStatus(Number(m.statusCode))
+        }));
+
+      console.log('Processed data:', { userProjects, userMilestones });
+
+      // Calculate stats
+      const stats = {
+        totalEarnings: userMilestones
+          .filter(m => m.freelancer === address && m.status === 'approved')
+          .reduce((total, m) => total + parseFloat(m.amount), 0)
+          .toFixed(4),
+        activeProjects: userProjects.filter(p => p.status === 'in_progress').length,
+        completedProjects: userProjects.filter(p => p.status === 'completed').length,
+        disputes: userMilestones.filter(m => m.status === 'disputed').length
       };
-  
-      setStats(statsToSet);
-      setProjects(formattedProjects);
-  
+
+      setStats(stats);
+      setProjects(userProjects);
+      setMilestones(userMilestones);
+
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       toast({
@@ -91,20 +127,41 @@ export default function Dashboard() {
     }
   };
 
-  const getMilestoneStatus = (statusNum) => {
-    const statusMap = {
-      0: 'pending',
-      1: 'in_progress',
-      2: 'submitted',
-      3: 'approved',
-      4: 'disputed',
-      5: 'rejected'
-    };
-    return statusMap[statusNum] || 'pending';
+  const fetchInvoices = async () => {
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      await requestNetworkHelper.initialize(provider);
+      const requests = await requestNetworkHelper.getAllPaymentRequests(address);
+      
+      // Transform the requests data for display
+      const formattedRequests = requests.map(request => {
+        const requestData = request.getData();
+        return {
+          id: request.requestId,
+          amount: ethers.formatUnits(requestData.expectedAmount, 18),
+          currency: requestData.currency.value,
+          payee: requestData.payee.value,
+          payer: requestData.payer.value,
+          status: requestData.state,
+          description: requestData.contentData.description,
+          deadline: new Date(requestData.contentData.deadline).toLocaleDateString(),
+          timestamp: new Date(requestData.timestamp).toLocaleDateString()
+        };
+      });
+      
+      setInvoices(formattedRequests);
+    } catch (error) {
+      console.error('Failed to fetch invoices:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch invoices",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleNewProject = () => {
-    navigate('/payment-request')
+    navigate('/explore')
   }
 
   if (!isConnected) {
@@ -183,13 +240,13 @@ export default function Dashboard() {
           <TabsList className="bg-gray-800 text-gray-300">
             <TabsTrigger value="projects" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">Projects</TabsTrigger>
             <TabsTrigger value="milestones" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">Milestones</TabsTrigger>
-            <TabsTrigger value="disputes" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">Disputes</TabsTrigger>
+            <TabsTrigger value="invoices" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">Invoices</TabsTrigger>
           </TabsList>
 
           <TabsContent value="projects">
             <Card className="bg-gray-800 border-gray-700">
               <CardHeader>
-                <CardTitle className="text-xl font-semibold">Active Projects</CardTitle>
+                <CardTitle className="text-xl font-semibold">Your Projects</CardTitle>
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[400px]">
@@ -197,8 +254,7 @@ export default function Dashboard() {
                     <TableHeader>
                       <TableRow className="border-gray-700">
                         <TableHead className="text-gray-200">Project</TableHead>
-                        <TableHead className="text-gray-200">Client</TableHead>
-                        <TableHead className="text-gray-200">Amount</TableHead>
+                        <TableHead className="text-gray-200">Budget</TableHead>
                         <TableHead className="text-gray-200">Deadline</TableHead>
                         <TableHead className="text-gray-200">Progress</TableHead>
                         <TableHead className="text-gray-200">Status</TableHead>
@@ -210,9 +266,10 @@ export default function Dashboard() {
                         projects.map((project) => (
                           <TableRow key={project.id} className="border-gray-700">
                             <TableCell className="font-medium text-gray-50">{project.title}</TableCell>
-                            <TableCell className="text-gray-50">{project.client}</TableCell>
-                            <TableCell className="text-gray-50">{project.amount} ETH</TableCell>
-                            <TableCell className="text-gray-50">{project.deadline}</TableCell>
+                            <TableCell className="text-gray-50">{project.budget} ETH</TableCell>
+                            <TableCell className="text-gray-50">
+                              {new Date(Number(project.deadline) * 1000).toLocaleDateString()}
+                            </TableCell>
                             <TableCell className="text-gray-50">
                               {project.completedMilestones}/{project.milestones} Milestones
                             </TableCell>
@@ -223,7 +280,7 @@ export default function Dashboard() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => navigate(`/milestones/${project.id}`)}
+                                onClick={() => navigate(`/explore`)}
                                 className="bg-blue-500 hover:bg-blue-600 text-white"
                               >
                                 View Details
@@ -233,8 +290,8 @@ export default function Dashboard() {
                         ))
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center py-4 text-gray-300">
-                            No projects found
+                          <TableCell colSpan={6} className="text-center py-4 text-gray-300">
+                            No projects found. Click "New Project" to create one.
                           </TableCell>
                         </TableRow>
                       )}
@@ -248,21 +305,111 @@ export default function Dashboard() {
           <TabsContent value="milestones">
             <Card className="bg-gray-800 border-gray-700">
               <CardHeader>
-                <CardTitle className="text-xl font-semibold">Project Milestones</CardTitle>
+                <CardTitle className="text-xl font-semibold">Your Milestones</CardTitle>
               </CardHeader>
               <CardContent>
-                {/* Milestone content will be implemented in Milestones.jsx */}
+                <ScrollArea className="h-[400px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-gray-700">
+                        <TableHead className="text-gray-200">Description</TableHead>
+                        <TableHead className="text-gray-200">Role</TableHead>
+                        <TableHead className="text-gray-200">Amount</TableHead>
+                        <TableHead className="text-gray-200">Deadline</TableHead>
+                        <TableHead className="text-gray-200">Status</TableHead>
+                        <TableHead className="text-gray-200">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {milestones.length > 0 ? (
+                        milestones.map((milestone) => (
+                          <TableRow key={milestone.id} className="border-gray-700">
+                            <TableCell className="font-medium text-gray-50">{milestone.description}</TableCell>
+                            <TableCell className="text-gray-50">
+                              {milestone.freelancer === address ? 'Freelancer' : 'Client'}
+                            </TableCell>
+                            <TableCell className="text-gray-50">{milestone.amount} ETH</TableCell>
+                            <TableCell className="text-gray-50">
+                              {new Date(Number(milestone.deadline) * 1000).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell className="text-gray-50">
+                              <StatusBadge status={milestone.status} />
+                            </TableCell>
+                            <TableCell className="text-gray-50">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => navigate(`/milestone-submission`)}
+                                className="bg-blue-500 hover:bg-blue-600 text-white"
+                              >
+                                Manage
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-4 text-gray-300">
+                            No milestones found
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="disputes">
-            <Card className="bg-gray-800 border-gray-700">
+          <TabsContent value="invoices">
+            <Card>
               <CardHeader>
-                <CardTitle className="text-xl font-semibold">Active Disputes</CardTitle>
+                <CardTitle className="flex items-center">
+                  <FileText className="w-5 h-5 mr-2" />
+                  Invoices
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                {/* Dispute content will be implemented in Disputes.jsx */}
+                {loading ? (
+                  <Loading />
+                ) : invoices.length === 0 ? (
+                  <div className="text-center py-6 text-gray-500">
+                    No invoices found
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[400px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Due Date</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {invoices.map((invoice) => (
+                          <TableRow key={invoice.id}>
+                            <TableCell>{invoice.timestamp}</TableCell>
+                            <TableCell>
+                              <div className="max-w-md">
+                                <p className="truncate">{invoice.description.split('\n')[0]}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {invoice.amount} {invoice.currency}
+                            </TableCell>
+                            <TableCell>
+                              <StatusBadge status={invoice.status} />
+                            </TableCell>
+                            <TableCell>{invoice.deadline}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

@@ -5,12 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/
 import { Button } from './ui/button'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog'
 import { Textarea } from './ui/textarea'
-import { CheckCircle, XCircle, AlertTriangle, Upload } from 'lucide-react'
+import { CheckCircle, XCircle, AlertTriangle, Upload, FileText } from 'lucide-react'
 import { contractInteractions } from '../utils/contractInteractions'
 import { ipfsHelper } from '../utils/ipfsHelper'
+import { requestNetworkHelper } from '../utils/requestNetworkHelper'
 import { toast } from './ui/use-toast'
 import { Loading } from './ui/loading'
 import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { Badge } from './ui/badge'
 
 export default function Escrow() {
   const { address } = useAccount();
@@ -31,6 +34,14 @@ export default function Escrow() {
     files: []
   });
   const [showSubmissionDialog, setShowSubmissionDialog] = useState(false);
+  const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
+  const [selectedEscrow, setSelectedEscrow] = useState(null);
+  const [invoiceDetails, setInvoiceDetails] = useState({
+    title: '',
+    description: '',
+    amount: '',
+    currency: 'USDC'
+  });
 
   useEffect(() => {
     if (address) {
@@ -57,8 +68,14 @@ export default function Escrow() {
         if (milestone.client === address || milestone.freelancer === address) {
           // Get IPFS data if available
           let ipfsData = {};
-          if (milestone.deliverablesHash) {
-            ipfsData = await ipfsHelper.getContent(milestone.deliverablesHash);
+          if (milestone.deliverablesHash && milestone.deliverablesHash !== '') {
+            try {
+              ipfsData = await ipfsHelper.getContent(milestone.deliverablesHash);
+              console.log('IPFS Data for milestone', i, ':', ipfsData);
+            } catch (ipfsError) {
+              console.warn('Failed to fetch IPFS data for milestone', i, ':', ipfsError);
+              ipfsData = {}; // Use empty object if IPFS fetch fails
+            }
           }
 
           const deadline = new Date(Number(milestone.deadline) * 1000);
@@ -67,19 +84,21 @@ export default function Escrow() {
           userEscrows.push({
             id: i,
             projectTitle: milestone.description,
-            amount: ethers.formatEther(milestone.amount),
+            amount: milestone.amount,
             freelancer: milestone.freelancer,
             client: milestone.client,
             status: getMilestoneStatus(milestone.status),
+            statusCode: milestone.status,
             deadline: isValidDate ? deadline.toLocaleDateString() : 'No Deadline',
             deliverables: ipfsData.deliverables || [],
-            isClient: milestone.client === address
+            isClient: milestone.client === address,
+            deliverablesHash: milestone.deliverablesHash || ''
           });
         }
       }
 
+      console.log('Fetched escrows:', userEscrows);
       setEscrows(userEscrows);
-      setLoading(false);
     } catch (error) {
       console.error('Error fetching escrows:', error);
       toast({
@@ -87,6 +106,7 @@ export default function Escrow() {
         description: 'Failed to load escrows',
         variant: 'destructive'
       });
+    } finally {
       setLoading(false);
     }
   };
@@ -187,35 +207,81 @@ export default function Escrow() {
 
   const getMilestoneStatus = (statusCode) => {
     const statuses = {
-      0: 'pending',
-      1: 'in_progress',
-      2: 'submitted',
-      3: 'approved',
-      4: 'disputed',
-      5: 'rejected'
+      0: 'PENDING_START',
+      1: 'IN_PROGRESS',
+      2: 'SUBMITTED',
+      3: 'COMPLETED',
+      4: 'DISPUTED',
+      5: 'CANCELLED'
     };
-    return statuses[statusCode] || 'unknown';
+    return statuses[statusCode] || 'UNKNOWN';
+  };
+
+  const handleCreateInvoice = async (escrow) => {
+    try {
+      setLoading(true);
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      await requestNetworkHelper.initialize(provider);
+      
+      const invoice = await requestNetworkHelper.createPaymentRequest({
+        amount: escrow.amount,
+        currency: escrow.tokenAddress,
+        payee: escrow.freelancer,
+        payer: address,
+        description: `Escrow Payment - ${escrow.title}\n\n${escrow.description}`,
+        deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).getTime()
+      });
+
+      if (!invoice) {
+        throw new Error('Failed to create invoice');
+      }
+
+      toast({
+        title: "Success",
+        description: "Invoice created successfully",
+        variant: "default"
+      });
+
+      setShowInvoiceDialog(false);
+    } catch (error) {
+      console.error('Error creating invoice:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create invoice",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleApprove = async (id) => {
     try {
       setLoading(true);
-      const tx = await contractInteractions.releaseMilestone(id);
-      await tx.wait();
+      const escrowDetails = escrows.find(e => e.id === id);
+      if (!escrowDetails) throw new Error('Escrow details not found');
 
+      // Create invoice first
+      await handleCreateInvoice(escrowDetails);
+
+      // Then approve escrow
+      await contractInteractions.approveEscrow(id);
+      
       toast({
-        title: 'Success',
-        description: 'Payment released successfully'
+        title: "Success",
+        description: "Escrow approved and invoice created",
+        variant: "default"
       });
-
+      
       await fetchEscrows();
     } catch (error) {
-      console.error('Error approving milestone:', error);
+      console.error('Error approving escrow:', error);
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to release payment',
-        variant: 'destructive'
+        title: "Error",
+        description: error.message || "Failed to approve escrow",
+        variant: "destructive"
       });
+    } finally {
       setLoading(false);
     }
   };
@@ -277,226 +343,53 @@ export default function Escrow() {
     setSelectedFiles(prev => [...prev, ...files]);
   };
 
-  const handleSubmitMilestone = async (id) => {
+  const handleSubmitWork = async (milestoneId) => {
     try {
       setLoading(true);
       
-      // Validate inputs
-      if (!submissionDetails.trim()) {
-        throw new Error("Please provide submission details");
-      }
-      if (selectedFiles.length === 0) {
-        throw new Error("Please upload at least one deliverable");
+      // First upload files to IPFS if any
+      let ipfsHash = '';
+      if (selectedFiles.length > 0) {
+        ipfsHash = await ipfsHelper.uploadMilestoneDeliverables(
+          { id: milestoneId, description: submissionDetails },
+          selectedFiles
+        );
       }
 
-      // Upload files to IPFS first
-      const uploadPromises = selectedFiles.map(file => 
-        ipfsHelper.uploadFile(file)
-      );
-      const fileHashes = await Promise.all(uploadPromises);
+      // Submit work to contract
+      const tx = await contractInteractions.submitMilestone(milestoneId, ipfsHash);
+      await tx.wait();
+
+      // Create submission invoice
+      const milestone = escrows.find(e => e.id === milestoneId);
+      if (!milestone) throw new Error('Milestone not found');
+
+      // Initialize Request Network
+      await requestNetworkHelper.initialize();
       
-      // Create deliverables metadata
-      const deliverablesData = {
-        description: submissionDetails,
-        files: fileHashes.map((hash, index) => ({
-          name: selectedFiles[index].name,
-          hash: hash,
-          type: selectedFiles[index].type,
-          size: selectedFiles[index].size
-        })),
-        timestamp: new Date().toISOString()
-      };
-
-      // Upload metadata to IPFS
-      const ipfsHash = await ipfsHelper.uploadMetadata(
-        deliverablesData,
-        `milestone-${id}`
-      );
-
-      // Submit milestone on-chain
-      const tx = await contractInteractions.submitMilestone(id, ipfsHash);
-      await tx.wait();
-
-      toast({
-        title: 'Success',
-        description: 'Milestone submitted successfully'
+      const submissionInvoice = await requestNetworkHelper.createPaymentRequest({
+        amount: ethers.utils.formatEther(milestone.amount),
+        currency: 'ETH',
+        payee: address, // freelancer
+        payer: milestone.client,
+        description: `Milestone Work Submission - ${milestone.projectTitle}\n\nDeliverables: ${submissionDetails}`,
+        deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).getTime(),
+        milestoneId: milestoneId
       });
 
-      // Update local state
-      setEscrows(prev => prev.map(escrow => 
-        escrow.id === id 
-          ? { 
-              ...escrow, 
-              status: 'submitted',
-              deliverables: deliverablesData.files
-            }
-          : escrow
-      ));
-
-      // Reset form
-      setSubmissionDetails('');
-      setSelectedFiles([]);
-      
-      await fetchEscrows();
-    } catch (error) {
-      console.error('Error submitting milestone:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to submit milestone',
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleApproveMilestone = async (id) => {
-    try {
-      setLoading(true);
-      
-      // Get milestone details first
-      const milestone = escrows.find(e => e.id === id);
-      if (!milestone) {
-        throw new Error("Milestone not found");
+      if (!submissionInvoice) {
+        throw new Error('Failed to create submission invoice');
       }
-
-      // Only client can approve
-      if (!milestone.isClient) {
-        throw new Error("Only the client can approve milestones");
-      }
-
-      // Approve milestone and release payment
-      const tx = await contractInteractions.approveMilestone(id);
-      await tx.wait();
-
-      toast({
-        title: 'Success',
-        description: 'Milestone approved and payment released'
-      });
-
-      // Update local state
-      setEscrows(prev => prev.map(escrow => 
-        escrow.id === id 
-          ? { ...escrow, status: 'approved' }
-          : escrow
-      ));
-
-      await fetchEscrows();
-    } catch (error) {
-      console.error('Error approving milestone:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to approve milestone',
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVoteOnDispute = async (disputeId) => {
-    try {
-      setLoading(true);
-      const tx = await contractInteractions.voteOnDispute(disputeId, voteForFreelancer);
-      await tx.wait();
-
-      toast({
-        title: 'Success',
-        description: 'Vote submitted successfully'
-      });
-
-      await fetchEscrows();
-    } catch (error) {
-      console.error('Error voting on dispute:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to submit vote',
-        variant: 'destructive'
-      });
-      setLoading(false);
-    }
-  };
-
-  const handleResolveDispute = async (disputeId) => {
-    try {
-      setLoading(true);
-      const tx = await contractInteractions.resolveDispute(disputeId);
-      await tx.wait();
-
-      toast({
-        title: 'Success',
-        description: 'Dispute resolved successfully'
-      });
-
-      await fetchEscrows();
-    } catch (error) {
-      console.error('Error resolving dispute:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to resolve dispute',
-        variant: 'destructive'
-      });
-      setLoading(false);
-    }
-  };
-
-  const handleSubmitWork = async () => {
-    try {
-      setLoading(true);
-      
-      if (!submissionData.description.trim()) {
-        throw new Error("Please provide submission details");
-      }
-      if (submissionData.files.length === 0) {
-        throw new Error("Please upload at least one file");
-      }
-
-      // Upload files to IPFS
-      const uploadPromises = submissionData.files.map(file => 
-        ipfsHelper.uploadFile(file)
-      );
-      const fileHashes = await Promise.all(uploadPromises);
-
-      // Create submission metadata
-      const submissionMetadata = {
-        description: submissionData.description,
-        files: fileHashes.map((hash, index) => ({
-          name: submissionData.files[index].name,
-          hash: hash,
-          type: submissionData.files[index].type,
-          size: submissionData.files[index].size
-        })),
-        timestamp: new Date().toISOString()
-      };
-
-      // Upload metadata to IPFS
-      const ipfsHash = await ipfsHelper.uploadMetadata(
-        submissionMetadata,
-        `milestone-${submissionData.milestoneId}`
-      );
-
-      // Submit to blockchain
-      const contract = await contractInteractions.getContract();
-      const tx = await contract.submitMilestoneDeliverable(
-        submissionData.milestoneId,
-        ipfsHash
-      );
-      await tx.wait();
 
       toast({
         title: 'Success',
         description: 'Work submitted successfully'
       });
 
-      // Reset form and refresh data
-      setSubmissionData({
-        milestoneId: null,
-        description: '',
-        files: []
-      });
+      setSelectedFiles([]);
+      setSubmissionDetails('');
       setShowSubmissionDialog(false);
       await fetchEscrows();
-
     } catch (error) {
       console.error('Error submitting work:', error);
       toast({
@@ -518,19 +411,108 @@ export default function Escrow() {
     rejected: 'text-gray-500'
   };
 
+  const handleCreateMilestone = async (formData) => {
+    try {
+      setLoading(true);
+      
+      // First create the milestone in the contract
+      const tx = await contractInteractions.createMilestone(
+        formData.freelancer,
+        formData.amount,
+        formData.description,
+        formData.deadline
+      );
+      await tx.wait();
+
+      // Then create the escrow funding invoice
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      await requestNetworkHelper.initialize(provider);
+      
+      const fundingInvoice = await requestNetworkHelper.createPaymentRequest({
+        amount: formData.amount,
+        currency: 'ETH',
+        payee: formData.freelancer,
+        payer: address,
+        description: `Milestone Escrow Funding\n\nDescription: ${formData.description}\nDeadline: ${new Date(formData.deadline).toLocaleDateString()}`,
+        deadline: formData.deadline
+      });
+
+      if (!fundingInvoice) {
+        throw new Error('Failed to create funding invoice');
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Milestone created and funded successfully'
+      });
+
+      await fetchEscrows();
+    } catch (error) {
+      console.error('Error creating milestone:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create milestone',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartMilestone = async (id) => {
+    try {
+      setLoading(true);
+      const tx = await contractInteractions.startMilestone(id);
+      await tx.wait();
+
+      // Create milestone start invoice
+      const milestone = escrows.find(e => e.id === id);
+      if (!milestone) throw new Error('Milestone not found');
+
+      // Initialize Request Network with proper provider
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      await requestNetworkHelper.initialize(provider);
+      
+      const startInvoice = await requestNetworkHelper.createPaymentRequest({
+        amount: ethers.formatEther(milestone.amount),
+        currency: '0x07865c6e87b9f70255377e024ace6630c1eaa37f', // Goerli USDC
+        payee: milestone.freelancer,
+        payer: address,
+        description: `Milestone Started - ${milestone.projectTitle}\n\nEscrow Amount Locked`,
+        deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).getTime()
+      });
+
+      if (!startInvoice) {
+        throw new Error('Failed to create start invoice');
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Milestone started successfully'
+      });
+
+      await fetchEscrows();
+    } catch (error) {
+      console.error('Error starting milestone:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to start milestone',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (loading) {
     return <Loading />;
   }
 
   return (
-    <div className="p-6 pt-20">
+    <div className="p-6">
       <h2 className="text-2xl font-bold mb-6">Escrow Management</h2>
       
-      <div className="mb-4 p-4 bg-gray-100 rounded">
-        <p>Total Escrows: {escrows.length}</p>
-        <p>Loading: {loading ? 'Yes' : 'No'}</p>
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {escrows.map((escrow) => (
           <Card key={escrow.id} className="relative">
@@ -546,14 +528,12 @@ export default function Escrow() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-500">Amount:</span>
-                  <span className="font-semibold">{escrow.amount} ETH</span>
+                  <span className="font-semibold">{ethers.formatEther(escrow.amount)} ETH</span>
                 </div>
                 
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-500">Status:</span>
-                  <span className={`font-semibold ${statusColors[escrow.status]}`}>
-                    {escrow.status.charAt(0).toUpperCase() + escrow.status.slice(1)}
-                  </span>
+                  <Badge>{escrow.status}</Badge>
                 </div>
 
                 <div className="flex justify-between items-center">
@@ -561,25 +541,62 @@ export default function Escrow() {
                   <span>{escrow.deadline}</span>
                 </div>
 
-                {!escrow.isClient && escrow.status === 'in_progress' && (
+                {/* Show Start button for client when status is PENDING_START */}
+                {escrow.status === 'PENDING_START' && escrow.isClient && (
                   <Button
-                    className="w-full mt-4 bg-primary hover:bg-primary/90"
-                    onClick={() => {
-                      console.log('Opening submission dialog for milestone:', escrow.id);
-                      setSubmissionData(prev => ({
-                        ...prev,
-                        milestoneId: escrow.id
-                      }));
-                      setShowSubmissionDialog(true);
-                    }}
+                    className="w-full"
+                    onClick={() => handleStartMilestone(escrow.id)}
+                    disabled={loading}
                   >
-                    Submit Work for Milestone #{escrow.id}
+                    Start Milestone
                   </Button>
                 )}
 
+                {/* Submit Work Button (for Freelancer) */}
+                {escrow.status === 'IN_PROGRESS' && !escrow.isClient && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button className="w-full">
+                        <Upload className="w-4 h-4 mr-2" />
+                        Submit Work
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Submit Work</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Please provide details of your completed work
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <div className="space-y-4 my-4">
+                        <Textarea
+                          placeholder="Describe your work..."
+                          value={submissionDetails}
+                          onChange={(e) => setSubmissionDetails(e.target.value)}
+                        />
+                        <Input
+                          type="file"
+                          multiple
+                          onChange={(e) => setSelectedFiles(Array.from(e.target.files))}
+                        />
+                      </div>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => handleSubmitWork(escrow.id)}
+                          disabled={loading || !submissionDetails.trim()}
+                        >
+                          Submit
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+
+                {/* Show deliverables if available */}
                 {escrow.deliverables && escrow.deliverables.length > 0 && (
                   <div className="mt-4">
-                    <h4 className="text-sm font-medium mb-2">Current Deliverables:</h4>
+                    <h4 className="text-sm font-medium mb-2">Deliverables:</h4>
                     <ul className="text-sm space-y-1">
                       {escrow.deliverables.map((file, index) => (
                         <li key={index} className="text-blue-500 hover:text-blue-600">
@@ -599,108 +616,7 @@ export default function Escrow() {
             </CardContent>
           </Card>
         ))}
-
-        {escrows.length === 0 && (
-          <div className="col-span-full text-center py-12 text-gray-500">
-            No milestones found. Create a new project to get started.
-          </div>
-        )}
       </div>
-
-      <AlertDialog 
-        open={showSubmissionDialog} 
-        onOpenChange={(open) => {
-          if (!open) {
-            setSubmissionData({
-              milestoneId: null,
-              description: '',
-              files: []
-            });
-          }
-          setShowSubmissionDialog(open);
-        }}
-      >
-        <AlertDialogContent className="max-w-md">
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Submit Work for Milestone #{submissionData.milestoneId}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Please provide details about your work and upload any relevant files.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          
-          <div className="space-y-4 my-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Description
-              </label>
-              <Textarea
-                placeholder="Describe your work and any specific details..."
-                value={submissionData.description}
-                onChange={(e) => setSubmissionData(prev => ({
-                  ...prev,
-                  description: e.target.value
-                }))}
-                className="min-h-[100px]"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Upload Files
-              </label>
-              <Input
-                type="file"
-                multiple
-                onChange={(e) => {
-                  const files = Array.from(e.target.files || []);
-                  setSubmissionData(prev => ({
-                    ...prev,
-                    files: [...prev.files, ...files]
-                  }));
-                }}
-                className="mb-2"
-              />
-              
-              {submissionData.files.length > 0 && (
-                <div className="mt-2 p-2 bg-gray-50 rounded">
-                  <h4 className="text-sm font-medium mb-2">Selected Files:</h4>
-                  <ul className="text-sm space-y-1">
-                    {submissionData.files.map((file, index) => (
-                      <li key={index} className="flex items-center justify-between">
-                        <span className="truncate">{file.name}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSubmissionData(prev => ({
-                              ...prev,
-                              files: prev.files.filter((_, i) => i !== index)
-                            }));
-                          }}
-                        >
-                          ×
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleSubmitWork}
-              disabled={!submissionData.description.trim() || submissionData.files.length === 0}
-            >
-              Submit Work
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

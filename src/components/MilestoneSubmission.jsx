@@ -4,13 +4,15 @@ import { ethers } from 'ethers';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
 import { Badge } from './ui/badge';
 import { toast } from './ui/use-toast';
 import { Loading } from './ui/loading';
-import { Upload, CheckCircle, Star, DollarSign } from 'lucide-react';
+import { Upload, CheckCircle, Star, DollarSign, FileText } from 'lucide-react';
 import { contractInteractions } from '../utils/contractInteractions';
+import { requestNetworkHelper } from '../utils/requestNetworkHelper';
 
 export default function MilestoneSubmission() {
   const { address } = useAccount();
@@ -19,6 +21,8 @@ export default function MilestoneSubmission() {
   const [submissionDetails, setSubmissionDetails] = useState('');
   const [totalLockedFunds, setTotalLockedFunds] = useState(0);
   const [transactionHistory, setTransactionHistory] = useState([]);
+  const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
+  const [selectedMilestone, setSelectedMilestone] = useState(null);
 
   useEffect(() => {
     if (address) {
@@ -29,7 +33,6 @@ export default function MilestoneSubmission() {
 
   const fetchTransactionHistory = async () => {
     try {
-      // This would need to be implemented in your backend or using blockchain events
       const history = await contractInteractions.getMilestoneTransactions(address);
       setTransactionHistory(history);
     } catch (error) {
@@ -49,7 +52,7 @@ export default function MilestoneSubmission() {
             id: id,
             freelancer: details.freelancer,
             client: details.client,
-            amount: ethers.formatEther(details.amount),
+            amount: details.amount,
             description: details.description,
             status: details.status,
             statusCode: details.statusCode,
@@ -64,14 +67,13 @@ export default function MilestoneSubmission() {
       const locked = milestoneDetails.reduce((total, m) => {
         // Only count milestones that are not approved or rejected
         if (m.statusCode !== 3 && m.statusCode !== 5) {
-          return total + parseFloat(m.amount);
+          return total + parseFloat(ethers.formatEther(m.amount));
         }
         return total;
       }, 0);
       
       setTotalLockedFunds(locked);
       setMilestones(milestoneDetails);
-      setLoading(false);
     } catch (error) {
       console.error('Error fetching milestones:', error);
       toast({
@@ -79,20 +81,88 @@ export default function MilestoneSubmission() {
         description: 'Failed to load milestones',
         variant: 'destructive'
       });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateInvoice = async (milestone) => {
+    try {
+      setLoading(true);
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      await requestNetworkHelper.initialize(provider);
+      
+      const invoice = await requestNetworkHelper.createPaymentRequest({
+        amount: milestone.amount,
+        currency: milestone.tokenAddress || 'ETH',
+        payee: address,
+        payer: milestone.client,
+        description: `Milestone: ${milestone.description}\n\nSubmission Details: ${submissionDetails}`,
+        deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).getTime()
+      });
+
+      if (!invoice) {
+        throw new Error('Failed to create invoice');
+      }
+
+      toast({
+        title: "Success",
+        description: "Invoice created successfully",
+        variant: "default"
+      });
+
+      setShowInvoiceDialog(false);
+    } catch (error) {
+      console.error('Error creating invoice:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create invoice",
+        variant: "destructive"
+      });
+    } finally {
       setLoading(false);
     }
   };
 
   const handleSubmitMilestone = async (id) => {
     try {
+      if (!submissionDetails.trim()) {
+        toast({
+          title: "Error",
+          description: "Please provide submission details",
+          variant: "destructive"
+        });
+        return;
+      }
+
       setLoading(true);
-      
+      const milestone = milestones.find(m => m.id === id);
+      if (!milestone) throw new Error('Milestone not found');
+
+      // First submit the milestone to the contract
       const tx = await contractInteractions.submitMilestone(id, submissionDetails);
       await tx.wait();
 
+      // Then create the work submission invoice
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      await requestNetworkHelper.initialize(provider);
+      
+      const submissionInvoice = await requestNetworkHelper.createPaymentRequest({
+        amount: milestone.amount,
+        currency: 'ETH',
+        payee: address, // freelancer
+        payer: milestone.client,
+        description: `Milestone Work Submission - ${milestone.description}\n\nDeliverables: ${submissionDetails}`,
+        deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).getTime()
+      });
+
+      if (!submissionInvoice) {
+        throw new Error('Failed to create submission invoice');
+      }
+
       toast({
         title: 'Success',
-        description: 'Milestone submitted successfully'
+        description: 'Milestone submitted and invoice created'
       });
 
       setSubmissionDetails('');
@@ -114,8 +184,30 @@ export default function MilestoneSubmission() {
     try {
       setLoading(true);
       
+      // First approve the milestone in the contract
       const tx = await contractInteractions.approveMilestone(id);
       await tx.wait();
+
+      // Then create the completion invoice
+      const milestone = milestones.find(m => m.id === id);
+      if (!milestone) throw new Error('Milestone not found');
+
+      // Initialize Request Network
+      await requestNetworkHelper.initialize();
+      
+      const completionInvoice = await requestNetworkHelper.createPaymentRequest({
+        amount: ethers.utils.formatEther(milestone.amount),
+        currency: 'ETH',
+        payee: milestone.freelancer,
+        payer: address,
+        description: `Milestone Completion - ${milestone.description}\n\nDelivery: ${milestone.deliverablesHash}`,
+        deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).getTime(),
+        milestoneId: id
+      });
+
+      if (!completionInvoice) {
+        throw new Error('Failed to create completion invoice');
+      }
 
       toast({
         title: 'Success',
@@ -165,7 +257,7 @@ export default function MilestoneSubmission() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-500">Amount:</span>
-                  <span className="font-semibold">{milestone.amount} ETH</span>
+                  <span className="font-semibold">{ethers.formatEther(milestone.amount)} ETH</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-500">Status:</span>
@@ -198,6 +290,17 @@ export default function MilestoneSubmission() {
                           value={submissionDetails}
                           onChange={(e) => setSubmissionDetails(e.target.value)}
                         />
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedMilestone(milestone);
+                            setShowInvoiceDialog(true);
+                          }}
+                          className="w-full mt-2"
+                        >
+                          <FileText className="w-4 h-4 mr-2" />
+                          Create Invoice
+                        </Button>
                       </div>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -225,7 +328,7 @@ export default function MilestoneSubmission() {
                       <AlertDialogHeader>
                         <AlertDialogTitle>Approve Milestone</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Approving this milestone will release {milestone.amount} ETH to the freelancer.
+                          Approving this milestone will release {ethers.formatEther(milestone.amount)} ETH to the freelancer.
                           This action cannot be undone.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
@@ -294,6 +397,37 @@ export default function MilestoneSubmission() {
           )}
         </div>
       </div>
+
+      {/* Invoice Creation Dialog */}
+      <AlertDialog open={showInvoiceDialog} onOpenChange={setShowInvoiceDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Create Invoice</AlertDialogTitle>
+            <AlertDialogDescription>
+              Create an invoice for milestone submission
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea
+                value={submissionDetails}
+                onChange={(e) => setSubmissionDetails(e.target.value)}
+                placeholder="Describe the work completed..."
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => selectedMilestone && handleCreateInvoice(selectedMilestone)}
+              disabled={loading || !submissionDetails.trim()}
+            >
+              Create Invoice
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 } 

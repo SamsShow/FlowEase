@@ -181,12 +181,27 @@ export class IPFSHelper {
    */
   async getContent(hash) {
     try {
-      const gateway = 'https://gateway.pinata.cloud/ipfs'
-      const response = await axios.get(`${gateway}/${hash}`)
-      return response.data
+      // Remove any 'ipfs-' prefix if it exists
+      const cleanHash = hash.replace(/^ipfs-\d+-/, '');
+      
+      // Check if hash is empty or invalid
+      if (!cleanHash || cleanHash.trim() === '') {
+        return {};
+      }
+
+      const gateway = 'https://gateway.pinata.cloud/ipfs';
+      const response = await axios.get(`${gateway}/${cleanHash}`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      return response.data;
     } catch (error) {
-      console.error('Error fetching content from IPFS:', error)
-      throw error
+      console.error('Error fetching content from IPFS:', error);
+      // Return empty object instead of throwing error to prevent UI breaks
+      return {};
     }
   }
 

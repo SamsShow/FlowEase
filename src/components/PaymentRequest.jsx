@@ -1,6 +1,6 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAccount } from 'wagmi'
+import { useAccount, usePublicClient } from 'wagmi'
 import { ethers } from 'ethers'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card'
 import { Input } from './ui/input'
@@ -9,7 +9,7 @@ import { Textarea } from './ui/textarea'
 import { Button } from './ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from './ui/select'
 import { toast } from './ui/use-toast'
-import { contractInteractions } from '../utils/contractInteractions'
+import { requestNetworkHelper } from '../utils/requestNetworkHelper'
 
 // Utility function for robust input validation
 const validateInputs = (formData) => {
@@ -48,22 +48,45 @@ const validateInputs = (formData) => {
 const PaymentRequest = () => {
   const navigate = useNavigate()
   const { isConnected, address } = useAccount()
+  const publicClient = usePublicClient()
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     amount: '',
-    currency: 'ETH',
+    currency: 'USDC',
     clientAddress: '',
     deadline: ''
   })
 
+  useEffect(() => {
+    const initializeRequestNetwork = async () => {
+      if (publicClient) {
+        try {
+          // Convert publicClient to ethers provider
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          await requestNetworkHelper.initialize(provider);
+        } catch (error) {
+          console.error('Failed to initialize Request Network:', error);
+          toast({
+            title: "Initialization Error",
+            description: "Failed to initialize payment system",
+            variant: "destructive"
+          });
+        }
+      }
+    };
+
+    initializeRequestNetwork();
+  }, [publicClient]);
+
   // Token addresses with network-specific considerations
   const getTokenAddress = useCallback((currency) => {
+    // Goerli testnet addresses
     const tokenAddresses = {
-      ETH: "0x0000000000000000000000000000000000000000", // Native ETH
-      USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC on Ethereum mainnet
-      DAI: "0x6B175474E89094C44Da98b954EedeAC495271d0F" // DAI on Ethereum mainnet
+      USDC: "0x07865c6e87b9f70255377e024ace6630c1eaa37f", // Goerli USDC
+      DAI: "0x11fe4b6ae13d2a6055c8d9cf65c55bac32b5d844",  // Goerli DAI
+      USDT: "0x509ee0d083ddf8ac028f2a56731412edd63223b9"  // Goerli USDT
     }
     return tokenAddresses[currency] || null
   }, [])
@@ -71,7 +94,6 @@ const PaymentRequest = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    // Initial connection check
     if (!isConnected) {
       toast({
         title: "Wallet Not Connected",
@@ -94,103 +116,52 @@ const PaymentRequest = () => {
       return
     }
 
-    setLoading(true)
     try {
-      // Robust deadline conversion
-      const deadlineTimestamp = Math.floor(new Date(formData.deadline).getTime() / 1000)
-
-      // Dynamic decimal handling
-      const decimals = formData.currency === 'ETH' ? 18 :
-        formData.currency === 'USDC' ? 6 :
-          formData.currency === 'DAI' ? 18 : 18
-
-      // Safe parsing of amount
-      const parsedAmount = ethers.parseUnits(formData.amount.toString(), decimals)
+      setLoading(true)
+      
+      // Get token address for the selected currency
       const tokenAddress = getTokenAddress(formData.currency)
-
-      // Retrieve contract with error handling
-      const contract = await contractInteractions.getContract()
-      if (!contract) {
-        throw new Error("Unable to initialize contract. Please check your network connection.")
+      if (!tokenAddress) {
+        throw new Error('Invalid currency selected')
       }
 
-      // Comprehensive transaction parameters
-      const transactionParams = {
-        freelancer: formData.clientAddress,
-        tokenAddress: tokenAddress,
-        amount: parsedAmount,
-        description: formData.description,
-        deadline: deadlineTimestamp,
-        ...(formData.currency === 'ETH' ? { value: parsedAmount } : {})
+      // Create payment request using Request Network
+      const request = await requestNetworkHelper.createPaymentRequest({
+        amount: formData.amount,
+        currency: tokenAddress,
+        payee: address, // Current user's address (creator of request)
+        payer: formData.clientAddress,
+        description: `${formData.title}\n\n${formData.description}`,
+        deadline: new Date(formData.deadline).getTime()
+      })
+
+      if (!request) {
+        throw new Error('Failed to create payment request')
       }
-
-      console.log('Creating milestone with params:', transactionParams)
-
-      // Gas estimation with error handling
-
-
-      let gasEstimate;
-      try {
-        gasEstimate = await contract.createMilestone.estimateGas(
-          transactionParams.freelancer,
-          transactionParams.tokenAddress,
-          transactionParams.amount,
-          transactionParams.description,
-          transactionParams.deadline,
-          { value: transactionParams.value || 0n } // Ensure `value` is a BigInt
-        );
-
-        if (!gasEstimate) {
-          throw new Error('Gas estimate returned undefined or null');
-        }
-      } catch (estimationError) {
-        console.error('Gas estimation failed:', estimationError);
-        throw new Error('Unable to estimate gas. Transaction might fail.');
-      }
-
-      // Convert gas estimate to BigInt if not already
-      const gasEstimateBigInt = BigInt(gasEstimate);
-
-      // Add 20% buffer to gas estimate
-      const gasLimit = (gasEstimateBigInt * 120n) / 100n; // Using BigInt arithmetic
-
-
-      // Execute transaction
-      const tx = await contract.createMilestone(
-        transactionParams.freelancer,
-        transactionParams.tokenAddress,
-        transactionParams.amount,
-        transactionParams.description,
-        transactionParams.deadline,
-        {
-          value: transactionParams.value || 0,
-          gasLimit
-        }
-      )
-
-      // Wait for transaction confirmation
-      const receipt = await tx.wait()
 
       toast({
         title: "Success",
-        description: "Payment request created successfully!",
+        description: "Payment request created successfully",
         variant: "default"
       })
 
-      // Navigate to dashboard
-      navigate('/dashboard')
+      // Reset form
+      setFormData({
+        clientAddress: '',
+        amount: '',
+        currency: 'USDC',
+        title: '',
+        description: '',
+        deadline: ''
+      })
 
+      // Navigate to invoice list
+      navigate('/invoices')
     } catch (error) {
-      console.error('Transaction Error:', error)
-
-      // Comprehensive error handling
-      const errorMessage = error.reason ||
-        error.message ||
-        "An unexpected error occurred during payment request creation"
-
+      console.error('Payment request creation failed:', error)
       toast({
-        title: "Transaction Failed",
-        description: errorMessage,
+        title: "Error",
+        description: error.message || "Failed to create payment request",
         variant: "destructive"
       })
     } finally {
@@ -221,7 +192,7 @@ const PaymentRequest = () => {
         <CardHeader>
           <CardTitle>Create Payment Request</CardTitle>
           <CardDescription>
-            Create a new payment request for your freelance work
+            Create a new payment request using Request Network
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -257,6 +228,7 @@ const PaymentRequest = () => {
                   id="amount"
                   name="amount"
                   type="number"
+                  step="0.000001"
                   value={formData.amount}
                   onChange={handleChange}
                   placeholder="0.00"
@@ -267,25 +239,24 @@ const PaymentRequest = () => {
               <div className="space-y-2">
                 <Label htmlFor="currency">Currency</Label>
                 <Select
+                  name="currency"
                   value={formData.currency}
-                  onValueChange={(value) =>
-                    setFormData(prev => ({ ...prev, currency: value }))
-                  }
+                  onValueChange={(value) => handleChange({ target: { name: 'currency', value } })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select currency" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ETH">ETH</SelectItem>
                     <SelectItem value="USDC">USDC</SelectItem>
                     <SelectItem value="DAI">DAI</SelectItem>
+                    <SelectItem value="USDT">USDT</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="clientAddress">Client's Wallet Address</Label>
+              <Label htmlFor="clientAddress">Client Wallet Address</Label>
               <Input
                 id="clientAddress"
                 name="clientAddress"
@@ -301,14 +272,14 @@ const PaymentRequest = () => {
               <Input
                 id="deadline"
                 name="deadline"
-                type="date"
+                type="datetime-local"
                 value={formData.deadline}
                 onChange={handleChange}
                 required
               />
             </div>
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" disabled={loading} className="w-full">
               {loading ? 'Creating Request...' : 'Create Payment Request'}
             </Button>
           </form>

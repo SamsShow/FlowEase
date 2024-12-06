@@ -373,21 +373,11 @@ export class ContractInteractions {
   async submitMilestone(milestoneId, deliverablesHash) {
     try {
       const contract = await this.getContract();
-      
-      // Get current milestone status
-      const details = await contract.getMilestoneDetails(milestoneId);
-      const statusCode = Number(details.status);
-      
-      // Check if status is valid for submission (pending = 0 or in_progress = 1)
-      if (statusCode !== 0 && statusCode !== 1) {
-        throw new Error(`Cannot submit milestone in ${this.getMilestoneStatus(statusCode)} status`);
-      }
-
-      const tx = await contract.submitMilestone(milestoneId, deliverablesHash);
+      const tx = await contract.submitMilestone(milestoneId, deliverablesHash || '');
       await tx.wait();
       return tx;
     } catch (error) {
-      console.error("Error submitting milestone:", error);
+      console.error('Error submitting milestone:', error);
       throw error;
     }
   }
@@ -399,7 +389,7 @@ export class ContractInteractions {
       await tx.wait();
       return tx;
     } catch (error) {
-      console.error("Error approving milestone:", error);
+      console.error('Error approving milestone:', error);
       throw error;
     }
   }
@@ -411,7 +401,7 @@ export class ContractInteractions {
       await tx.wait();
       return tx;
     } catch (error) {
-      console.error("Error starting milestone:", error);
+      console.error('Error starting milestone:', error);
       throw error;
     }
   }
