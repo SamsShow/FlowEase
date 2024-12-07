@@ -21,7 +21,7 @@ import { TypeAnimation } from "react-type-animation";
 import { Link } from "react-router-dom";
 import { GridBackgroundDemo } from "../ui/background";
 
-const AnimatedCard = motion(Card);
+const AnimatedCard = motion.create(Card);
 
 const FeatureCard = ({ feature, index }) => {
   return (

@@ -45,14 +45,15 @@ export default function Navbar() {
     { path: '/transactions', label: 'Transactions' },
     { path: '/analytics', label: 'Analytics' },
     { path: '/escrow', label: 'Escrow' },
+    { path: '/invoice', label: 'Invoices' }
   ];
 
   const navVariants = {
     hidden: { y: -50, opacity: 0 },
-    visible: { 
-      y: 0, 
+    visible: {
+      y: 0,
       opacity: 1,
-      transition: { 
+      transition: {
         type: 'spring',
         stiffness: 120,
         damping: 20,
@@ -67,7 +68,7 @@ export default function Navbar() {
   };
 
   return (
-    <motion.nav 
+    <motion.nav
       className="fixed w-full top-0 z-50 bg-gray-900 bg-opacity-80 backdrop-blur-sm shadow-lg"
       initial="hidden"
       animate="visible"
@@ -94,11 +95,10 @@ export default function Navbar() {
                   >
                     <Link
                       to={item.path}
-                      className={`px-3 py-2 rounded-md ${
-                        location.pathname === item.path
+                      className={`px-3 py-2 rounded-md ${location.pathname === item.path
                           ? 'bg-blue-600 text-white'
                           : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                      }`}
+                        }`}
                     >
                       {item.label}
                     </Link>
@@ -112,7 +112,7 @@ export default function Navbar() {
             {isConnected ? (
               <>
                 <NotificationCenter />
-                
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>

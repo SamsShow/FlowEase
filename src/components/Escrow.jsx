@@ -58,7 +58,7 @@ export default function Escrow() {
     try {
       setLoading(true);
       const contract = await contractInteractions.getContract();
-      
+
       // Get all milestones for the user (both as client and freelancer)
       const milestoneCount = await contract.milestoneCounter();
       const userEscrows = [];
@@ -114,7 +114,7 @@ export default function Escrow() {
   const fetchUserProfile = async () => {
     try {
       const profile = await contractInteractions.getUserProfile(address);
-      
+
       // Check if profile exists and has all required properties
       if (profile && Array.isArray(profile) && profile.length >= 7) {
         setUserProfile({
@@ -222,7 +222,7 @@ export default function Escrow() {
       setLoading(true);
       const provider = new ethers.BrowserProvider(window.ethereum);
       await requestNetworkHelper.initialize(provider);
-      
+
       const invoice = await requestNetworkHelper.createPaymentRequest({
         amount: escrow.amount,
         currency: escrow.tokenAddress,
@@ -266,13 +266,13 @@ export default function Escrow() {
 
       // Then approve escrow
       await contractInteractions.approveEscrow(id);
-      
+
       toast({
         title: "Success",
         description: "Escrow approved and invoice created",
         variant: "default"
       });
-      
+
       await fetchEscrows();
     } catch (error) {
       console.error('Error approving escrow:', error);
@@ -293,7 +293,7 @@ export default function Escrow() {
       }
 
       setLoading(true);
-      
+
       // Upload dispute details to IPFS
       const disputeData = {
         reason: disputeReason,
@@ -303,7 +303,7 @@ export default function Escrow() {
 
       // Upload any evidence files
       if (selectedFiles.length > 0) {
-        const uploadPromises = selectedFiles.map(file => 
+        const uploadPromises = selectedFiles.map(file =>
           ipfsHelper.uploadFile(file)
         );
         const fileHashes = await Promise.all(uploadPromises);
@@ -346,7 +346,7 @@ export default function Escrow() {
   const handleSubmitWork = async (milestoneId) => {
     try {
       setLoading(true);
-      
+
       // First upload files to IPFS if any
       let ipfsHash = '';
       if (selectedFiles.length > 0) {
@@ -366,7 +366,7 @@ export default function Escrow() {
 
       // Initialize Request Network
       await requestNetworkHelper.initialize();
-      
+
       const submissionInvoice = await requestNetworkHelper.createPaymentRequest({
         amount: ethers.utils.formatEther(milestone.amount),
         currency: 'ETH',
@@ -414,7 +414,7 @@ export default function Escrow() {
   const handleCreateMilestone = async (formData) => {
     try {
       setLoading(true);
-      
+
       // First create the milestone in the contract
       const tx = await contractInteractions.createMilestone(
         formData.freelancer,
@@ -427,7 +427,7 @@ export default function Escrow() {
       // Then create the escrow funding invoice
       const provider = new ethers.BrowserProvider(window.ethereum);
       await requestNetworkHelper.initialize(provider);
-      
+
       const fundingInvoice = await requestNetworkHelper.createPaymentRequest({
         amount: formData.amount,
         currency: 'ETH',
@@ -473,7 +473,7 @@ export default function Escrow() {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       await requestNetworkHelper.initialize(provider);
-      
+
       const startInvoice = await requestNetworkHelper.createPaymentRequest({
         amount: ethers.formatEther(milestone.amount),
         currency: '0x07865c6e87b9f70255377e024ace6630c1eaa37f', // Goerli USDC
@@ -510,9 +510,9 @@ export default function Escrow() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-6 mt-10">
       <h2 className="text-2xl font-bold mb-6">Escrow Management</h2>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {escrows.map((escrow) => (
           <Card key={escrow.id} className="relative">
@@ -530,7 +530,7 @@ export default function Escrow() {
                   <span className="text-sm text-gray-500">Amount:</span>
                   <span className="font-semibold">{ethers.formatEther(escrow.amount)} ETH</span>
                 </div>
-                
+
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-500">Status:</span>
                   <Badge>{escrow.status}</Badge>

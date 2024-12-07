@@ -21,6 +21,7 @@ import Settings from './components/Settings/Settings';
 import ExplorePage from './components/Explore/ExplorePage';
 import ClientProjectsPage from './components/Client/ClientProjectsPage';
 import MilestoneSubmission from "./components/MilestoneSubmission";
+import InoiveList from "./components/InvoiceList";
 
 // Set up wagmi config
 const config = createConfig({
@@ -45,7 +46,7 @@ function App() {
               {/* Public Routes */}
               <Route path="/" element={<LandingPage />} />
               <Route path="/explore" element={<ExplorePage />} />
-              
+
               {/* Protected Routes */}
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/profile" element={<Profile />} />
@@ -59,6 +60,7 @@ function App() {
               <Route path="/chat/:projectId" element={<ChatSystem />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/client/projects" element={<ClientProjectsPage />} />
+              <Route path="/invoice" element={<InoiveList />} />
             </Routes>
             <Toaster />
           </div>
