@@ -25,6 +25,7 @@
     "@react-three/drei": "^9.118.0",
     "@react-three/fiber": "^8.17.10",
     "@requestnetwork/payment-processor": "^0.50.0",
+    "@requestnetwork/payment-widget": "^0.3.5",
     "@requestnetwork/request-client.js": "^0.50.0",
     "@requestnetwork/types": "^0.47.0",
     "@requestnetwork/web3-signature": "^0.8.3",
