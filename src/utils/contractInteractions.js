@@ -119,9 +119,23 @@ export class ContractInteractions {
   async getContract() {
     if (!window.ethereum) throw new Error("No wallet found!");
 
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    const signer = await provider.getSigner();
-    return new ethers.Contract(this.contractAddress, this.contractABI, signer);
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const network = await provider.getNetwork();
+      console.log("Connected to network:", network);
+      
+      const contract = new ethers.Contract(this.contractAddress, this.contractABI, signer);
+      console.log("Contract instance created:", {
+        address: this.contractAddress,
+        signer: await signer.getAddress()
+      });
+      
+      return contract;
+    } catch (error) {
+      console.error("Error creating contract instance:", error);
+      throw error;
+    }
   }
 
   async getProvider() {
@@ -135,18 +149,31 @@ export class ContractInteractions {
       if (!address) throw new Error("Address is required");
 
       const contract = await this.getContract();
+      console.log("Fetching profile for address:", address);
+      
       const profile = await contract.getUserProfile(address);
+      console.log("Raw profile data:", profile);
 
-      // Convert BigInts to numbers and format the response
-      return {
-        ipfsHash: profile[0],
-        profileImage: profile[1],
-        totalJobs: Number(profile[2]),
-        completedJobs: Number(profile[3]),
-        averageRating: Number(profile[4]) / 100, // Convert from scaled integer
-        isVerified: profile[5],
-        reviewCount: Number(profile[6]),
-      };
+      // Handle the returned data as an array
+      if (Array.isArray(profile)) {
+        return profile;
+      }
+
+      // If it's returned as an object with named properties
+      if (profile && typeof profile === 'object') {
+        return [
+          profile.ipfsHash || '',
+          profile.profileImage || '',
+          profile.totalJobs ? profile.totalJobs.toString() : '0',
+          profile.completedJobs ? profile.completedJobs.toString() : '0',
+          profile.averageRating ? profile.averageRating.toString() : '0',
+          profile.isVerified || false,
+          profile.reviewCount ? profile.reviewCount.toString() : '0'
+        ];
+      }
+
+      // Return default values if no profile found
+      return ['', '', '0', '0', '0', false, '0'];
     } catch (error) {
       console.error("Error fetching profile:", error);
       throw error;
@@ -277,33 +304,39 @@ export class ContractInteractions {
   async getMilestones() {
     try {
       const contract = await this.getContract();
+      console.log("Fetching milestone counter...");
       const milestoneCount = await contract.milestoneCounter();
+      console.log("Milestone count:", milestoneCount);
+      
       const milestones = [];
 
       for (let i = 1; i <= milestoneCount; i++) {
         try {
+          console.log(`Fetching details for milestone ${i}...`);
           const milestone = await contract.getMilestoneDetails(i);
+          console.log(`Raw milestone ${i} data:`, milestone);
+          
           if (milestone) {
             milestones.push({
-              id: milestone.id.toString(),
+              id: milestone.id ? milestone.id.toString() : i.toString(),
               freelancer: milestone.freelancer,
               client: milestone.client,
-              amount: this.formatWeiToEth(milestone.amount), // Use helper method
-              description: milestone.description,
-              status: this.getMilestoneStatus(Number(milestone.status)),
-              statusCode: Number(milestone.status),
-              createdAt: Number(milestone.createdAt),
-              deadline: Number(milestone.deadline),
-              deliverablesHash: milestone.deliverablesHash,
+              amount: this.formatWeiToEth(milestone.amount),
+              description: milestone.description || '',
+              status: this.getMilestoneStatus(Number(milestone.status || 0)),
+              statusCode: Number(milestone.status || 0),
+              createdAt: Number(milestone.createdAt || 0),
+              deadline: Number(milestone.deadline || 0),
+              deliverablesHash: milestone.deliverablesHash || ''
             });
           }
         } catch (error) {
           console.error(`Error fetching milestone ${i}:`, error);
-          continue; // Skip failed milestones
+          continue;
         }
       }
 
-      // Sort by creation date, newest first
+      console.log("Processed milestones:", milestones);
       return milestones.sort((a, b) => b.createdAt - a.createdAt);
     } catch (error) {
       console.error("Error getting all milestones:", error);
